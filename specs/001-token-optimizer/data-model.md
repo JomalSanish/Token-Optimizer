@@ -1,4 +1,4 @@
-﻿# Data Model: Token Optimizer
+# Data Model: Token Optimizer
 
 **Phase**: 1 | **Date**: 2026-10-07 | **Plan**: [plan.md](plan.md)
 
@@ -41,12 +41,26 @@ ProjectProfile {
     sprintWeeks: number
     iterationsPerFeature: number
   }
+  phases: ConfirmedPhase[]        // FR-052: proposed by Enhance, verified/edited by the user; drive estimation and pre-selection
   constraints: string[]
   profileVersion: number          // monotonically incrementing on each Enhance run
   createdAt: ISO8601
   finalizedAt?: ISO8601
 }
 ```
+
+ConfirmedPhase {
+  id: string                      // unique within the profile, e.g. "build-1"
+  phaseTypeId: string             // MUST exist in the catalog Phase taxonomy (2d)
+  track: "build" | "runtime"      // MUST equal the catalog phase type's track
+  name: string                    // user-editable label
+  source: "llm" | "user" | "taxonomy-suggestion"
+  confirmed: boolean              // taxonomy suggestions start false; finalisation requires all true
+}
+
+**Finalisation guard**: a version can be finalised only if it has at least one phase, every
+`phaseTypeId` exists in the catalog, and every phase is confirmed. Editing phases creates a new
+draft version without an LLM call.
 
 **Validation**: Zod schema in `packages/core/src/profile/schema.ts`.
 **Storage**: `context.workspaceState.update("tokenOptimizer.profileHistory", ProfileHistoryEntry[])`.
@@ -62,8 +76,9 @@ ProjectProfile {
 Provider {
   id: string                      // e.g. "anthropic"
   label: string                   // e.g. "Anthropic Claude"
-  adapterType: "anthropic" | "openai" | "google" | "mistral" | "openai-compatible"
-  baseUrl: string                 // API base URL
+  adapterType: "anthropic" | "openai" | "google" | "mistral" | "openai-compatible" | "host-lm"
+  baseUrl: string                 // API base URL ("" for host-lm)
+  hostLm?: { vendor: string, family?: string }   // adapterType "host-lm" only: selector for the host language-model API
   listModelsEndpoint?: string     // optional: relative path to list models
   keyFormatHint: string           // e.g. "sk-ant-..." shown during key entry
   enabled: boolean
@@ -121,6 +136,7 @@ Phase {
   name: string
   track: "build" | "runtime"
   sortOrder: number
+  description: string              // one or two sentences shown in the Estimate view (FR-018)
   archetypes: string[]             // project types this phase applies to
   defaultParams: {
     callsLow: number
@@ -220,15 +236,28 @@ Platform {
     markerFiles: string[]          // workspace-root-relative paths
   }
   artifactTargets: ArtifactTarget[]
+  isDefault?: boolean             // exactly one platform; used when detection finds no match (no hard-coded id)
+  agentInvocation?: AgentInvocation   // absent -> clipboard fallback (FR-057)
   docsUrl: string
   verifiedAt: ISO8601
 }
 
 ArtifactTarget {
-  kind: "command" | "prompt" | "rule" | "instruction"
-  pathTemplate: string   // e.g. ".cursorrules", ".github/copilot-instructions.md"
+  kind: "command" | "prompt" | "rule" | "instruction" | "skill"
+  layout: "file" | "directory"   // "skill" targets use "directory": <pathTemplate>/SKILL.md + supporting files
+  defaultEnabled: boolean         // shown pre-ticked in the install review list; user can untick
+  pathTemplate: string   // e.g. ".cursorrules"; for skills include {{strategyId}}
   format: "markdown" | "yaml" | "json"
   frontmatterTemplate?: string
+}
+
+AgentInvocation {                 // how the IDE agent route works on this platform (FR-055)
+  mechanisms: Array<                // ordered by preference; first one available on the host is used
+    | { kind: "lm-edit", vendor: string, family?: string }   // extension calls host model API, applies reviewed edits
+    | { kind: "chat-handoff", commandId: string, argsTemplate: Record<string, string> }   // submit is never set
+    | { kind: "clipboard" }
+  >
+  verifiedAt: ISO8601
 }
 ```
 
@@ -238,7 +267,7 @@ ArtifactTarget {
 PromptTemplate {
   id: string
   version: number
-  purpose: "enhance" | "profile-extract" | "apply-edit" | "preview"
+  purpose: "enhance" | "profile-extract" | "apply-edit" | "preview" | "handoff"
   template: string           // handlebars-style with {{variable}} slots
   outputSchemaRef: string    // reference to a Zod schema name in core
   active: boolean
@@ -345,6 +374,61 @@ Checkpoint {
 ```
 
 Stored per-session in `workspaceState`. Referenced by the audit and rollback commands.
+
+---
+
+### 6. UserSetup
+
+Non-secret setup restored on launch (FR-050). Key values are never part of this entity.
+
+```typescript
+UserSetup {
+  platformId: string               // chosen or auto-detected platform id
+  platformOverridden: boolean
+  providers: Array<{
+    providerId: string
+    maskedKeys: Array<{ keySlot: number, maskedKey: string }>   // last 4 only
+    enabledModels: string[]
+  }>
+  enhanceModel?: { providerId: string, modelId: string }
+  copilotOnly: boolean
+  updatedAt: ISO8601
+}
+```
+
+**Storage**: `context.globalState` (on-device). No accounts, no server-side copy. Key values live in
+SecretStorage only and are re-entered on a new device.
+
+### 7. Stage contracts and ApplicabilityContext
+
+```typescript
+// Four stages. Only "enhance" and "implement" may call an LLM.
+EnhanceStage    : (description, previousProfile?)            -> { narrative, profile }          // LLM
+EstimateStage   : (profile, catalog, overrides?)             -> EstimationResult                // pure, no LLM
+OptimizeStage   : (profile, estimation, catalog.strategies)  -> { preselected, notPreselected, conflicts, savings }   // pure, no LLM
+ImplementStage  : (selection, platform, profile)             -> InstallPlan | IdeAgentRun       // LLM only via host model API / host chat
+
+ApplicabilityContext {
+  profile: ProjectProfile                 // paths such as "llm.usesRag"
+  phaseTypes: string[]                    // confirmed phaseTypeIds, e.g. "embedding-ingestion"
+  tokenShareByPhaseType: Record<string, number>   // expected-case share of its track's tokens, 0..1
+}
+```
+
+Strategy `applicability` paths resolve against `ApplicabilityContext`, so a predicate can say
+`{ path: "phaseTypes", includes: "embedding-ingestion" }` or
+`{ path: "tokenShareByPhaseType.generation", gte: 0.4 }`.
+
+### 8. HandoffPrompt
+
+```typescript
+HandoffPrompt {
+  strategyIds: string[]
+  profileVersion: number
+  text: string                     // chat-handoff mechanism only; rendered from prompt template purpose="handoff", redacted per FR-048
+  checkpointId?: string            // set once the user confirms
+}
+```
 
 ---
 

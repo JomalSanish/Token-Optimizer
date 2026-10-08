@@ -1,4 +1,4 @@
-﻿openapi: "3.1.0"
+openapi: "3.1.0"
 info:
   title: Token Optimizer Catalog API
   version: "1.0.0"
@@ -244,11 +244,13 @@ components:
 
     Phase:
       type: object
-      required: [id, name, track, sortOrder, defaultParams]
+      required: [id, name, description, track, sortOrder, defaultParams]
       properties:
         id:
           type: string
         name:
+          type: string
+        description:
           type: string
         track:
           type: string
@@ -367,11 +369,16 @@ components:
           type: array
           items:
             type: object
-            required: [kind, pathTemplate, format]
+            required: [kind, layout, pathTemplate, format, defaultEnabled]
             properties:
               kind:
                 type: string
-                enum: [command, prompt, rule, instruction]
+                enum: [command, prompt, rule, instruction, skill]
+              layout:
+                type: string
+                enum: [file, directory]
+              defaultEnabled:
+                type: boolean
               pathTemplate:
                 type: string
               format:
@@ -379,6 +386,34 @@ components:
                 enum: [markdown, yaml, json]
               frontmatterTemplate:
                 type: string
+        isDefault:
+          type: boolean
+        agentInvocation:
+          type: object
+          required: [mechanisms, verifiedAt]
+          properties:
+            mechanisms:
+              type: array
+              items:
+                type: object
+                required: [kind]
+                properties:
+                  kind:
+                    type: string
+                    enum: [lm-edit, chat-handoff, clipboard]
+                  vendor:
+                    type: string
+                  family:
+                    type: string
+                  commandId:
+                    type: string
+                  argsTemplate:
+                    type: object
+                    additionalProperties:
+                      type: string
+            verifiedAt:
+              type: string
+              format: date-time
         docsUrl:
           type: string
           format: uri
@@ -396,7 +431,7 @@ components:
           type: integer
         purpose:
           type: string
-          enum: [enhance, profile-extract, apply-edit, preview]
+          enum: [enhance, profile-extract, apply-edit, preview, handoff]
         template:
           type: string
         outputSchemaRef:

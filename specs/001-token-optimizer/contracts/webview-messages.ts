@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Webview ↔ Extension Host Message Protocol
  *
  * All messages are validated with Zod schemas on both sides.
@@ -85,6 +85,19 @@ export type AuthStateMsg = Envelope<"auth/state", {
     enabledModels: ModelId[];
   }>;
   copilotAvailable: boolean;
+  platformOverridden: boolean;
+  enhanceModel?: { providerId: ProviderId; modelId: ModelId };
+}>;
+
+/** W→H: user overrides the auto-detected platform (FR-001, FR-050) */
+export type SetPlatformMsg = Envelope<"auth/setPlatform", {
+  platformId: string;
+}>;
+
+/** W→H: user picks the provider/model Enhance will use (FR-050) */
+export type SetEnhanceModelMsg = Envelope<"auth/setEnhanceModel", {
+  providerId: ProviderId;
+  modelId: ModelId;
 }>;
 
 /** W→H: user enables/disables a model for a provider */
@@ -129,6 +142,19 @@ export type FinalizeProfileMsg = Envelope<"enhance/finalize", {
   profileVersion: number;
 }>;
 
+/** W→H: user edits phases on the Enhance screen; no LLM call (FR-052) */
+export type EditPhasesMsg = Envelope<"enhance/editPhases", {
+  profileVersion: number;
+  phases: ConfirmedPhase[];
+}>;
+
+/** H→W: phases validated against the catalog; a new draft version was created */
+export type PhasesUpdatedMsg = Envelope<"enhance/phasesUpdated", {
+  profileVersion: number;
+  phases: ConfirmedPhase[];
+  problems: Array<{ phaseId: string; problem: "unknown-type" | "track-mismatch" | "unconfirmed" }>;
+}>;
+
 /** H→W: profile finalized; estimation now available */
 export type ProfileFinalizedMsg = Envelope<"enhance/profileFinalized", {
   profileVersion: number;
@@ -164,6 +190,7 @@ interface PhaseOverride {
 export type StrategySelectionMsg = Envelope<"strategy/selection", {
   selected: Array<{ strategyId: StrategyId; reason: string }>;
   conflicts: Array<{ a: StrategyId; b: StrategyId; explanation: string }>;
+  notPreselected: Array<{ strategyId: StrategyId; reason: string }>;  // FR-051: selectable, with why not pre-selected
 }>;
 
 /** W→H: user changed strategy selection */
@@ -206,12 +233,18 @@ export type GenerateCompleteMsg = Envelope<"optimize/generateComplete", {
 
 // ─── Optimize: Apply now ──────────────────────────────────────────────────────
 
-/** W→H: start Apply now pipeline */
-export type ApplyStartMsg = Envelope<"optimize/apply/start", {
+/** W→H: user chose Implement. route "install" -> optimize/generate flow; "ide-agent" -> mechanism from catalog */
+export type ImplementStartMsg = Envelope<"optimize/implement/start", {
+  route: "install" | "ide-agent";
   selectedStrategyIds: StrategyId[];
   profileVersion: number;
-  providerId: ProviderId;
-  modelId: ModelId;
+  modelRef?: { vendor: string; modelId: string };   // host model chosen by the user for lm-edit; values come from the host's own list
+}>;
+
+/** H→W: which mechanism the host will use for route "ide-agent" (from the catalog, first one available) */
+export type ImplementPlanMsg = Envelope<"optimize/implement/plan", {
+  mechanism: "lm-edit" | "chat-handoff" | "clipboard";
+  reason: string;
 }>;
 
 /** H→W: scanner progress */
@@ -239,6 +272,28 @@ export type ApplyCompleteMsg = Envelope<"optimize/apply/complete", {
   checkpointId: string;
 }>;
 
+// ─── Optimize: Hand off to IDE agent ──────────────────────────────────────────
+
+/** H→W: rendered, redacted prompt for review (chat-handoff and clipboard mechanisms). Nothing is dispatched yet. */
+export type HandoffPreviewMsg = Envelope<"optimize/handoff/preview", {
+  promptText: string;
+  redactionCount: number;
+  agentWritesOutsideReview: true;   // UI MUST show the FR-058 notice
+  hostCommandAvailable: boolean;    // false -> clipboard fallback (FR-057)
+}>;
+
+/** W→H: user confirms or cancels the previewed prompt */
+export type HandoffConfirmMsg = Envelope<"optimize/handoff/confirm", {
+  confirmed: boolean;
+}>;
+
+/** H→W: outcome of the hand-off */
+export type HandoffResultMsg = Envelope<"optimize/handoff/result", {
+  status: "opened" | "copied" | "cancelled" | "failed";
+  checkpointId?: string;     // absent when cancelled
+  message?: string;
+}>;
+
 /** H→W or W→H: cancel any in-progress operation */
 export type CancelMsg = Envelope<"operation/cancel", {
   operationId: string;
@@ -263,19 +318,27 @@ export type HostToWebviewMsg =
   | GenerateCompleteMsg
   | ApplyProgressMsg
   | ApplyProposalsMsg
-  | ApplyCompleteMsg;
+  | ApplyCompleteMsg
+  | ImplementPlanMsg
+  | PhasesUpdatedMsg
+  | HandoffPreviewMsg
+  | HandoffResultMsg;
 
 export type WebviewToHostMsg =
   | SaveKeyMsg
   | RemoveKeyMsg
   | SetEnabledModelsMsg
+  | SetPlatformMsg
+  | SetEnhanceModelMsg
   | EnhanceRunMsg
   | FinalizeProfileMsg
   | EstimateRequestMsg
   | StrategySetMsg
   | OptimizeGenerateMsg
-  | ApplyStartMsg
+  | ImplementStartMsg
+  | EditPhasesMsg
   | ApplyAcceptMsg
+  | HandoffConfirmMsg
   | CancelMsg;
 
 // ─── Re-exported data types (from core) ───────────────────────────────────────
@@ -284,6 +347,7 @@ export type WebviewToHostMsg =
 
 export type {
   ProjectProfile,
+  ConfirmedPhase,
   EstimationResult,
   EditProposal,
   Provider,

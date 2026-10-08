@@ -1,4 +1,4 @@
-﻿# Implementation Plan: Token Optimizer
+# Implementation Plan: Token Optimizer
 
 **Branch**: `001-token-optimizer` | **Date**: 2026-10-07 | **Spec**: [spec.md](spec.md)
 
@@ -45,7 +45,8 @@ to TS where new code is written).
 
 **Storage**:
 - Extension: VS Code SecretStorage (keys), workspaceState (profile version history,
-  baseline.json pointer), globalState (catalog cache + ETag).
+  baseline.json pointer), globalState (catalog cache + ETag). UserSetup (platform, enabled
+  models, Enhance model; FR-050): `globalState`, on-device only.
 - Catalog: MongoDB (existing Cluster0). No new databases.
 - Workspace artefacts: `.ai-optimizer/` directory written to the open workspace folder.
 
@@ -98,6 +99,7 @@ target throughput ≤ 500 req/min (Cloudflare or nginx rate limiter upstream).
 | IX — Privacy by default | ✅ PASS | FR-047/048/049; redact-by-default; preview-before-send; Copilot-only mode |
 | X — Platform-agnostic core | ✅ PASS | No vscode import in core/; platform paths from catalog |
 | XI — Spec-driven discipline | ✅ PASS | Constitution → Specify → Clarify → Plan (current) → Tasks → Implement |
+| XII — Staged pipeline, determinism boundary (proposed, constitution 1.1.0) | ✅ PASS | Only Enhance and Implement call an LLM; spy-adapter test (T149) |
 
 **Complexity justification** (Principle XI — no unnecessary complexity):
 
@@ -137,11 +139,12 @@ packages/
 │   │   ├── providers/         # Adapter interfaces + Anthropic/OpenAI/Google/Mistral/Compat impls
 │   │   ├── enhance/           # Enhance prompt runner, profile extractor, repair logic
 │   │   ├── profile/           # ProjectProfile Zod schema, version history types
-│   │   ├── phases/            # PhaseBuilder: deterministic profile → BUILD+RUNTIME phase lists
+│   │   ├── phases/            # PhaseResolver (confirmed profile phases + catalog defaults), PhaseSuggester (deterministic fallback)
 │   │   ├── estimation/        # estimate(), ExplainTree, per-phase formula, property tests
 │   │   ├── strategies/        # ApplicabilityEvaluator, ConflictResolver, SavingsAggregator
 │   │   ├── artifacts/         # ArtifactRenderer: template → .ai-optimizer/ + platform files
-│   │   ├── apply/             # ApplyPlanner, EditProposal schema, AnchorValidator
+│   │   ├── apply/             # EditProposal schema, AnchorValidator
+│   │   ├── pipeline/          # stage contracts (Enhance, Estimate, Optimize, Implement)
 │   │   └── index.ts
 │   ├── fixtures/              # golden profiles, catalogs, estimate outputs
 │   └── vitest.config.ts
@@ -155,6 +158,7 @@ packages/
 │   │   ├── lm/                # CopilotAdapter (vscode.lm bridge)
 │   │   ├── workspace/         # CheckpointService, WorkspaceEditApplier, DiffReviewer
 │   │   ├── scanner/           # tree-sitter scanner wrapper, language loader
+│   │   ├── handoff/           # HandoffService: chat-handoff and clipboard mechanisms of the IDE agent route (prompt, preview, checkpoint)
 │   │   └── commands/          # VS Code command registrations
 │   └── package.json           # extension manifest (contributes, engines.vscode)
 │
@@ -191,3 +195,26 @@ packages/
     ├── estimates/             # golden EstimationResult JSON files
     └── artifacts/             # golden .ai-optimizer/ directory snapshots
 ```
+
+---
+
+## Pipeline Architecture (2026-10-08)
+
+The product is four stages (called agents in the project brief), each with a typed input and output in `packages/core/src/pipeline/`:
+
+| Stage | Input | Output | LLM? | Notes |
+|---|---|---|---|---|
+| Enhance | description, previous profile | narrative, Project Profile with phases | Yes (user's provider/model, or host model in Copilot-only mode) | Phases proposed here, verified and edited by the user here; editing phases makes no LLM call |
+| Estimate | profile, catalog, overrides | EstimationResult per confirmed phase and model | No | Principle IV; pure function |
+| Optimize | profile, estimation, approved strategies | pre-selected set with reasons, conflicts, savings | No | Predicates run against ApplicabilityContext (profile + phase types + token share per phase); reasons come from catalog `reasonTemplate` |
+| Implement | selection, platform, profile | Install plan or IDE agent run | Only through the host model API or host chat | Route and mechanism come from the platform's catalog entry |
+
+**Implement routes.** Install writes skills, files or instructions to the platform's catalog targets in one undoable `WorkspaceEdit`. The IDE agent route walks the platform's ordered `agentInvocation.mechanisms`: `lm-edit` (the extension calls the host model API, receives structured edit proposals, validates anchors, shows per-hunk diff, checkpoints, applies one batch), then `chat-handoff` (open host chat with a reviewed prompt), then `clipboard`. `lm-edit` is a model completion with context the extension supplies, not the host's agent mode; it cannot browse the repository or run tools, which is why detection and anchoring are done by the extension.
+
+**Why the host vendor/family, command ids and platform paths are in the catalog**: Principle VII. An example of what to avoid is a hard-coded `vendor: 'copilot', family: 'gpt-4o'` selector or a hard-coded strategy registry in extension source.
+
+## Constitution Notes (2026-10-08)
+
+- A proposed `constitution.md` 1.1.0 accompanies this plan: Principle VI scoped to writes made by the extension and extended to the chat hand-off, new Principle XII (pipeline and determinism boundary), plus naming and path fixes in X and XI. It needs the amendment PR and two maintainer approvals from the Governance section before it is in force; this plan treats it as pending.
+- Keys stay on the device (Principle I holds unchanged). No accounts or server-side user data.
+- Prompt preview ordering: FR-047 requires preview before every LLM call, but PromptPreviewService (T117) is in Slice 8 while Enhance (T059) ships in Slice 3. See T146.

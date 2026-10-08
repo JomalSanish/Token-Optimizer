@@ -14,11 +14,19 @@
 
 ### Session 2026-10-07
 
-- Q: How are BUILD and RUNTIME phases derived from the Project Profile? → A: A deterministic algorithm maps profile attributes (project type, detected LLM integrations, scale flags) to phases from a catalog-defined phase taxonomy; the user can add, remove, or rename phases before estimation runs; no LLM call is involved in phase generation.
+- Q: How are BUILD and RUNTIME phases derived from the Project Profile? → A: *(Superseded 2026-10-08, see below.)* Originally: a deterministic mapping from profile attributes to a catalog phase taxonomy, with no LLM call. Now: proposed by Enhance, confirmed by the user in Enhance; the deterministic mapping remains only as a fallback suggester.
 - Q: Which parameters are user-editable per phase, and where do the low/expected/high defaults come from? → A: The user-editable parameters per phase are calls per phase, tokens per call, retries, and volume/scale; the low/expected/high default values for each parameter are stored in the catalog per phase type and applied on first load.
-- Q: Which languages are in scope for Apply now detection in v1? → A: TypeScript/JavaScript and Python only in v1.
+- Q: Which languages are in scope for IDE agent route detection in v1? → A: TypeScript/JavaScript and Python only in v1.
 - Q: How are tokenizer counts produced and how is approximation communicated? → A: Exact counts are produced by a local tokenizer library or a provider count endpoint where one exists for the model family; all other models show counts labelled "approximate" with an explicit ± error margin stated in the UI.
 - Q: What is redacted by default, and what are the privacy defaults? → A: Obvious secrets (API keys, tokens, passwords, connection strings matching common patterns) are redacted from prompt content by default before display and before transmission; the user always sees exactly what will be sent before each LLM call; a Copilot-only mode routes all LLM calls through the VS Code Language Model API with no external provider.
+
+### Session 2026-10-08 (v1 scope validation)
+
+- Q: Where are platform choice, provider selection, enabled models and keys persisted? → A: API keys stay on the device only, in secret storage; if the user changes device they re-enter them. Non-secret setup (platform, enabled models, Enhance model) is persisted on-device. Providers, models, platforms, pricing and strategies are never hard-coded: they are listed from the catalog (MongoDB behind the read-only API) and the user selects from that list. No accounts and no server-side user data in v1.
+- Q: Who decides the phases? → A: Phases are produced in the Enhance stage (proposed by the LLM, mapped to catalog phase types), shown to the user for verification, and may be edited there. The confirmed phases are part of the Project Profile. Estimation computes tokens for exactly those phases, and they also feed strategy pre-selection. This supersedes the 2026-10-07 answer that phases come from a purely deterministic mapping with no LLM involved; the deterministic mapping is kept only as a fallback suggester when the LLM returns no usable phases.
+- Q: What does "implement the strategies" mean in v1? → A: One Implement step with two routes. Route 1, Install: write the strategies as skills, files or instructions in the form the selected platform uses (for example skills for Claude Code), at paths from the catalog. Route 2, IDE agent: directly call the host IDE's agent. "Apply now" and "hand off to IDE" are the same route: the catalog's platform entry lists the mechanisms in order of preference (host language-model API with extension-applied reviewed edits, then opening the host chat with a prepared prompt, then clipboard).
+- Q: What is an "agent" in the four-agent design? → A: A pipeline stage with a typed input and output. Enhance and Implement call an LLM. Estimation and Optimization are deterministic: they use no LLM (constitution Principle IV; pre-selection is evaluated from catalog predicates).
+- Q: Are model routing and "jev" in v1? → A: No. Both, and per-agent usage analysis, are future scope.
 
 ---
 
@@ -63,6 +71,14 @@ safely."
 7. **Given** a key has been stored, **When** the user navigates to Settings,
    **Then** they can add, replace or remove any key; removing a key deletes it from
    secure storage entirely.
+8. **Given** the user has chosen a platform and enabled models in a previous session,
+   **When** they reopen the extension on the same device, **Then** the platform
+   selection and enabled models are restored without re-entry and onboarding is
+   skipped; on a different device the user sees onboarding again and re-enters keys
+   (FR-050).
+9. **Given** the catalog lists providers and models, **When** the user selects models,
+   **Then** only catalog entries are offered; adding a model or provider in the
+   catalog makes it appear with no extension release (FR-002).
 
 ---
 
@@ -106,12 +122,24 @@ structured, reusable profile."
    Estimate step becomes accessible using that profile version.
 7. **Given** Ctrl/Cmd+Enter is pressed in the description field, **When** this
    occurs, **Then** Enhance is triggered; pressing Enter alone inserts a newline.
+8. **Given** an Enhance run completes, **When** the result is shown, **Then** it lists
+   the proposed BUILD phases and RUNTIME phases, each mapped to a catalog phase type
+   and shown with a short description.
+9. **Given** proposed phases are shown, **When** the user adds, removes, renames or
+   changes the type of a phase, **Then** no LLM call is made, a new draft version is
+   created, and the phases are validated against the catalog phase types.
+10. **Given** the user marks a version as final, **When** it has no phases or has a
+    phase whose type is not in the catalog, **Then** finalisation is refused with a
+    message naming the problem.
+11. **Given** the LLM returns no usable phases, **When** the result is shown, **Then**
+    a starter set is suggested deterministically from the catalog phase types for the
+    project type, clearly labelled as a suggestion the user must confirm.
 
 ---
 
 ### User Story 3 — Phase-Wise Token & Cost Estimation (Priority: P1)
 
-From the final Project Profile, the extension derives two tracks of phases — BUILD
+From the final Project Profile, the extension takes the two tracks of phases the user confirmed in Enhance — BUILD
 (AI-assisted development work) and RUNTIME (the application's own LLM usage). The
 developer sees token counts (input, output, cached-input where supported), a
 low/expected/high range, and cost per enabled model using live catalog pricing. They
@@ -128,9 +156,9 @@ values — delivering "reliable cost visibility before committing to a model."
 **Acceptance Scenarios**:
 
 1. **Given** a finalised Project Profile and a catalog, **When** the Estimate screen
-   loads, **Then** BUILD and RUNTIME tracks are shown, each broken into project-specific
-   phases derived from the catalog's phase taxonomy via a deterministic mapping from
-   profile attributes; the user can add, remove, or rename phases before estimation begins.
+   loads, **Then** BUILD and RUNTIME tracks are shown, one row per phase the user
+   confirmed in Enhance; phases cannot be added or removed here (go back to Enhance,
+   which creates a new profile version).
 2. **Given** a phase is displayed, **When** the user inspects it, **Then** they see
    input tokens, output tokens, cached-input tokens (when the model supports it), and
    a low/expected/high cost range per enabled model.
@@ -152,7 +180,7 @@ values — delivering "reliable cost visibility before committing to a model."
 
 ### User Story 4 — Strategy Selection (Priority: P1)
 
-The developer navigates to the Strategy screen. Applicable strategies (loaded from the
+The developer navigates to the Optimize screen. Applicable strategies (loaded from the
 catalog, approved only) are pre-selected based on the Project Profile. Strategies are
 grouped by category (prompt efficiency, caching, model strategy, build-time practices,
 etc.). The developer can select or deselect any strategy; conflicting strategies cannot
@@ -168,7 +196,7 @@ the conflict indicator — delivering "actionable, conflict-free strategy choice
 
 **Acceptance Scenarios**:
 
-1. **Given** a finalised Project Profile, **When** the Strategy screen loads, **Then**
+1. **Given** a finalised Project Profile, **When** the Optimize screen loads, **Then**
    only strategies with `reviewStatus = "approved"` from the catalog are shown.
 2. **Given** the profile properties, **When** strategies are evaluated, **Then**
    applicable strategies are pre-selected and each shows a human-readable reason.
@@ -180,6 +208,10 @@ the conflict indicator — delivering "actionable, conflict-free strategy choice
    `[min%, max%]` range with the empirical or theoretical basis stated.
 5. **Given** the user deselects a strategy, **When** this occurs, **Then** the savings
    panel updates immediately without a page reload.
+6. **Given** two profiles that differ only in their confirmed phases (for example one
+   has a retrieval phase and one does not), **When** strategies are evaluated,
+   **Then** the pre-selected set differs accordingly and each reason names the phase
+   that triggered it (FR-026).
 
 ---
 
@@ -212,77 +244,92 @@ displayed — delivering "hands-on evidence that a strategy works on my content.
 
 ---
 
-### User Story 6 — Generate Optimiser Files (Priority: P1)
+### User Story 6 — Implement, Route 1: Install as Skills, Files or Instructions (Priority: P1)
 
-The developer chooses "Generate files" on the Optimise screen. The extension writes a
-structured workspace into the project under `.ai-optimizer/`: a configuration file,
-human-readable architecture and requirements documents, per-strategy guidance files,
-and platform-native command/prompt files rendered into the locations the catalog
-defines for the detected host. The developer can then trigger these commands from the
-host's AI chat. Existing files are never silently overwritten — a diff view with
-confirm is shown for each conflict.
+On the Implement screen the developer chooses "Install". The extension writes the
+selected strategies in the form the selected platform uses: agent skills where the
+platform supports them (for example Claude Code), otherwise instruction, rule, prompt
+or command files. Everything lives in the places the catalog declares for that platform.
+A neutral copy is also kept under `.ai-optimizer/` (configuration, project documents,
+per-strategy guidance, command templates). The host's development agent then discovers
+and uses the files on its own. Existing files are never silently overwritten.
 
-**Why this priority**: For developers who prefer gradual adoption or work in teams,
-having the optimizer's knowledge expressed as persistent, version-controllable files
-is more practical than always-live AI inference.
+**Why this priority**: This is the lowest-risk route: nothing is rewritten in the
+developer's code, the output is reviewable and version-controllable, and it works on
+platforms that have no model API for extensions.
 
-**Independent Test**: Can be tested by running Generate files on a fresh workspace and
-confirming all expected files are created in correct locations with non-empty,
-schema-valid content — delivering "a persistent, auditable optimization artefact."
+**Independent Test**: Run Install on a fresh workspace for two different catalog
+platforms and confirm the files appear at each platform's catalog-declared paths.
 
 **Acceptance Scenarios**:
 
-1. **Given** strategies are selected and "Generate files" is chosen, **When** generation
-   runs, **Then** `.ai-optimizer/optimizer.yaml`, project documents, strategy files, and
-   platform-native command files are created.
-2. **Given** a file from a previous run already exists and has been user-edited, **When**
-   generation runs, **Then** a diff view is shown and the user must confirm before the
-   file is updated.
-3. **Given** the detected host platform has catalog-defined artifact locations, **When**
-   command files are generated, **Then** they are written to those catalog-defined paths,
-   not to hard-coded paths.
-4. **Given** a git repository is present, **When** generation is about to write,
-   **Then** a checkpoint commit is created first; otherwise backup copies are written
-   to `.ai-optimizer/backups/<timestamp>/`.
+1. **Given** strategies are selected and the platform is chosen, **When** Install is
+   chosen, **Then** a review list of every file to be created or changed is shown
+   before anything is written.
+2. **Given** the user confirms, **When** installing, **Then** `.ai-optimizer/optimizer.yaml`,
+   project documents, per-strategy guidance and the platform's files are created in one
+   undoable batch.
+3. **Given** the platform's catalog entry has a `skill` target, **When** installing,
+   **Then** each strategy is written as a skill folder (`SKILL.md` plus supporting
+   files) at that location; where there is no skill target, the platform's
+   instruction, rule or prompt targets are used instead (FR-053).
+4. **Given** a file from a previous run exists and was user-edited, **When** installing,
+   **Then** a diff is shown and the user must confirm that file.
+5. **Given** a git repository is present, **When** the install is about to write,
+   **Then** a checkpoint is created first; otherwise backup copies go to
+   `.ai-optimizer/backups/<timestamp>/`.
+6. **Given** the user cancels at the review list, **When** they cancel, **Then**
+   nothing is written and no checkpoint is created.
 
 ---
 
-### User Story 7 — Apply Strategies Directly (Priority: P1)
+### User Story 7 — Implement, Route 2: IDE Agent (Priority: P1)
 
-The developer chooses "Apply now" on the Optimise screen. The extension scans the
-workspace for LLM call sites and prompt locations matching each selected strategy's
-detection rules. For each candidate, a model is asked to produce structured edit
-proposals. The developer reviews every proposed change in a native diff view with
-per-hunk accept/reject. Accepted changes are applied atomically (one undo reverts
-all) after a checkpoint. An optional audit step compares before/after token counts.
+On the Implement screen the developer chooses "IDE agent". The extension uses the
+mechanism the catalog lists first for the selected platform that is actually available
+on this host:
 
-**Why this priority**: Direct application is the highest-leverage action — it closes
-the loop from insight to code change. Without it, developers must manually implement
-strategies.
+- **Edit via the host's language-model API** (for example Copilot through the VS Code
+  Language Model API). The extension scans the workspace for LLM call sites matching
+  the selected strategies, asks the host model for structured edit proposals, validates
+  them, shows each in a diff with per-hunk accept or reject, creates a checkpoint, and
+  applies the accepted hunks in one undoable batch.
+- **Open the host's AI chat** with a prepared implementation prompt when the host has no
+  usable model API; the host's agent then does the editing itself.
+- **Copy the prompt to the clipboard** when neither is available.
 
-**Independent Test**: Can be tested by scanning a workspace with known LLM call sites
-and confirming that proposed edits are displayed in a diff view, that accepting and
-undoing them leaves the workspace unchanged — delivering "strategy application with
-full control and safety."
+**Why this priority**: It closes the loop from insight to code change using the agent
+the developer already has, without needing their own provider keys for this step.
+
+**Independent Test**: With strategies selected on a workspace with known LLM call
+sites, run the IDE agent route and confirm proposals appear as structured diffs,
+accepted hunks apply in one undo step, and cancelling at any point leaves the
+workspace unchanged.
 
 **Acceptance Scenarios**:
 
-1. **Given** strategies are selected and "Apply now" is chosen, **When** scanning
-   completes, **Then** all candidate locations across the workspace are identified
+1. **Given** strategies are selected and the host model API is available, **When** the
+   route starts, **Then** all candidate locations across the workspace are identified
    using each strategy's detection rules.
-2. **Given** a candidate location is found, **When** the model produces an edit
-   proposal, **Then** the proposal is structured (file path, anchor, original snippet,
-   replacement, rationale) and not free-form text.
-3. **Given** the anchor of a stale proposal no longer matches the file content,
-   **When** applying, **Then** the stale hunk is skipped with an explanatory message;
-   it is never applied blindly.
-4. **Given** proposals are displayed, **When** the user accepts a subset of hunks,
-   **Then** only accepted hunks are applied in a single atomic operation that can be
-   fully reversed with one undo.
+2. **Given** a candidate location is found, **When** the host model responds, **Then**
+   the proposal is structured (file path, anchor, original snippet, replacement,
+   rationale); free-form code is rejected.
+3. **Given** the anchor of a proposal no longer matches the file, **When** applying,
+   **Then** that hunk is skipped with an explanation and never applied blindly, including
+   when the user edited the file while the diff was open.
+4. **Given** proposals are displayed, **When** the user accepts a subset, **Then** only
+   those are applied in one atomic operation reversible with one undo.
 5. **Given** the user cancels at any point before applying, **When** they cancel,
-   **Then** the workspace is left completely unchanged.
-6. **Given** application is complete, **When** the user runs the audit, **Then** a
-   report shows before/after token counts compared against the stored baseline.
+   **Then** the workspace is unchanged and no checkpoint is left behind.
+6. **Given** the host has no usable model API and the catalog lists a chat hand-off,
+   **When** the user confirms the prompt preview, **Then** a checkpoint and baseline
+   are created, the host chat opens with the prompt pre-filled and not submitted, and
+   the extension itself writes nothing; the UI states that the host agent's edits are
+   outside the extension's diff review.
+7. **Given** neither is available, **When** the user chooses the route, **Then** the
+   prompt is copied to the clipboard and the user is told where to paste it.
+8. **Given** the route has finished, **When** the user runs the audit, **Then** a report
+   compares current token counts with the stored baseline.
 
 ---
 
@@ -322,7 +369,7 @@ the bundled snapshot is used and the UI reflects the offline status — deliveri
 ### Edge Cases
 
 - **Multi-root workspaces**: When multiple root folders are open, the user can select
-  which root(s) to scan for the workspace pre-fill and for Apply now detection.
+  which root(s) to scan for the workspace pre-fill and for IDE agent route detection.
 - **No workspace open**: All screens except the catalog browser are unavailable; a
   clear prompt to open a folder is shown.
 - **Monorepos with multiple languages**: Detection rules are applied per-file based on
@@ -376,8 +423,9 @@ the bundled snapshot is used and the UI reflects the offline status — deliveri
   scanning workspace package manifests, framework imports, and README files; the
   user MUST be able to edit or clear this draft.
 - **FR-010**: Pressing Enhance MUST call the chosen provider/model with a versioned
-  system prompt and return both a readable description and a schema-validated Project
-  Profile.
+  system prompt and return both a readable description (overview, tech stack,
+  components/agents, data flow, AI/LLM integration, scale assumptions, constraints, and
+  a BUILD/RUNTIME phase outline per FR-052) and a schema-validated Project Profile.
 - **FR-011**: Re-running Enhance on edited text MUST refine the previous version; it
   MUST NOT nest, duplicate, or wrap existing sections.
 - **FR-012**: The cost of each Enhance call MUST be shown to the user before and after
@@ -393,12 +441,11 @@ the bundled snapshot is used and the UI reflects the offline status — deliveri
   MUST insert a newline.
 
 **Estimation**
-- **FR-017**: The Estimate screen MUST derive BUILD and RUNTIME phase sets from the
-  Project Profile using a deterministic algorithm that maps profile attributes (project
-  type, detected LLM integrations, scale flags) to phases from a catalog-defined phase
-  taxonomy; the user MUST be able to add, remove, and rename phases before estimation
-  runs; no LLM call is involved in phase generation.
-- **FR-018**: For each phase, the extension MUST show input tokens, output tokens,
+- **FR-017**: The Estimate screen MUST show one BUILD or RUNTIME row per phase confirmed
+  in the finalised Project Profile (FR-052). Each phase carries a catalog phase type
+  from which default parameters are taken. Estimation uses no LLM.
+- **FR-018**: For each phase, the extension MUST show a short human-readable
+  description of what the phase covers (from the catalog), input tokens, output tokens,
   cached-input tokens (when the model supports it), and a low/expected/high cost
   range per enabled model using catalog pricing; default low/expected/high values for
   each phase parameter (calls per phase, tokens per call, retries, volume/scale) MUST
@@ -416,14 +463,18 @@ the bundled snapshot is used and the UI reflects the offline status — deliveri
   count endpoint when one exists for the model family, and labelled "exact"; for all
   other models the extension MUST use a character-based approximation labelled
   "approximate" with an explicit ± error margin displayed alongside the count.
-- **FR-024**: A model-comparison table MUST show total cost per model for each track.
+- **FR-024**: A model-comparison table MUST list every enabled model with its active
+  input and output price per million tokens, its pricing-verified date, and total cost
+  per model for each track.
 
 **Strategy Selection**
-- **FR-025**: The Strategy screen MUST load and display only catalog strategies with
+- **FR-025**: The Optimize screen MUST load and display only catalog strategies with
   `reviewStatus = "approved"`.
 - **FR-026**: Applicable strategies MUST be pre-selected using declarative applicability
-  predicates evaluated against the Project Profile; no hard-coded regex rules MUST
-  exist in extension source.
+  predicates evaluated against an applicability context made of the Project Profile, its
+  confirmed phase types and the expected-case token share per phase from the estimate;
+  no hard-coded regex rules MUST exist in extension source. Changing the confirmed
+  phases MUST be able to change the pre-selection.
 - **FR-027**: Each pre-selected strategy MUST show a human-readable reason for
   pre-selection.
 - **FR-028**: Conflicting strategies MUST be mutually exclusive in the UI; a
@@ -441,23 +492,23 @@ the bundled snapshot is used and the UI reflects the offline status — deliveri
   cost MUST be shown before the "Run with LLM" call is made; the call MUST NOT
   proceed without user confirmation.
 
-**Generate Files**
-- **FR-033**: The "Generate files" action MUST create the `.ai-optimizer/` workspace
+**Install Route (files)**
+- **FR-033**: The Install route MUST create the `.ai-optimizer/` workspace
   with `optimizer.yaml`, project documents, and per-strategy guidance files.
-- **FR-034**: Platform-native command/prompt files MUST be written to the paths defined
-  in the catalog's `platforms` collection for the detected host; paths MUST NOT be
-  hard-coded in extension source.
+- **FR-034**: Platform-native command, prompt, rule, instruction and skill files MUST be
+  written to the paths defined in the catalog's `platforms` collection for the selected
+  platform; paths MUST NOT be hard-coded in extension source.
 - **FR-035**: Existing user-edited files MUST NEVER be silently overwritten; a diff
   view with per-file confirm MUST be shown for each conflict.
 - **FR-036**: Before any write, the extension MUST create a checkpoint (git commit/stash
   if a repo exists; backup copies otherwise).
 
 **Apply Now**
-- **FR-037**: The "Apply now" action MUST scan the workspace for LLM call sites and
+- **FR-037**: The IDE agent route, when the host model API is used, MUST scan the workspace for LLM call sites and
   prompt locations using each selected strategy's language-specific detection rules;
   v1 MUST support TypeScript/JavaScript and Python files; support for additional
   languages is deferred to future releases.
-- **FR-038**: Edit proposals from the model MUST be structured JSON (file path, anchor,
+- **FR-038**: Edit proposals from the host model MUST be structured JSON (file path, anchor,
   original snippet, replacement, rationale); free-form code blocks MUST NOT be accepted.
 - **FR-039**: Before applying, the extension MUST validate that each proposal's anchor
   still matches the current file content; stale hunks MUST be skipped with an
@@ -480,6 +531,54 @@ the bundled snapshot is used and the UI reflects the offline status — deliveri
 - **FR-046**: If the catalog schema version is newer than the extension supports, the
   extension MUST fall back to the cached version and display an "extension update
   available" notice; it MUST NOT crash.
+
+**Strategy Selection (additions)**
+- **FR-051**: In addition to pre-selected strategies, the user MUST be able to select
+  any other approved strategy that does not conflict with the current selection; the
+  UI MUST show why a strategy was not pre-selected when its applicability predicate
+  evaluated false.
+
+**Setup Persistence**
+- **FR-050**: The platform choice, the enabled models per provider, and the model chosen
+  for Enhance MUST be persisted on-device and restored on next launch. Key values MUST
+  remain in secret storage only (FR-004) and MUST NOT be part of this data; there is no
+  server-side or cross-device sync of any of it.
+
+**Enhance Phases**
+- **FR-052**: Enhance MUST propose BUILD and RUNTIME phases, each mapped to a catalog
+  phase type, and the user MUST be able to add, remove, rename and retype phases on the
+  Enhance screen without an LLM call. Confirmed phases are stored in the Project Profile.
+  Finalisation MUST be refused when there are no phases or a phase has an unknown
+  type. When the LLM returns no usable phases, a deterministic starter set from the
+  catalog taxonomy MUST be suggested and labelled as unconfirmed.
+
+**Install Route**
+- **FR-053**: Install MUST emit each selected strategy in the form the platform uses,
+  chosen from the catalog's `artifactTargets` for that platform: `skill` targets as
+  skill folders, otherwise `instruction`, `rule`, `prompt` or `command` files. It MUST
+  also write the neutral copy under `.ai-optimizer/`. If the platform has no target of
+  any kind, only the neutral copy is written and the user is told. Before any write the
+  user MUST see the list of files to be created or changed; all writes MUST be applied
+  as one undoable batch.
+
+**IDE Agent Route**
+- **FR-054**: The Implement screen MUST offer two routes, Install and IDE agent, usable
+  independently or in sequence on the same selection.
+- **FR-055**: The IDE agent route MUST pick its mechanism from the ordered
+  `agentInvocation.mechanisms` list on the selected platform's catalog entry, using the
+  first one available on this host. The host-model vendor and family, the chat command
+  and its arguments MUST come from the catalog; no model name, vendor or command id may
+  appear in extension source.
+- **FR-056**: For the chat hand-off mechanism the extension MUST build one prompt from
+  the final Project Profile and the selected strategies' catalog guidance (prompt
+  template with purpose `handoff`), show it for review with redaction applied (FR-048),
+  create a checkpoint and capture the audit baseline, then open the chat with the
+  prompt pre-filled and not submitted.
+- **FR-057**: If no mechanism is available or invoking one fails, the extension MUST
+  copy the prompt to the clipboard, say so, and write nothing to the workspace.
+- **FR-058**: For the chat hand-off the UI MUST state before dispatch that edits made by
+  the host agent are outside the extension's diff review, and MUST offer rollback to the
+  checkpoint and the audit afterwards.
 
 **Privacy**
 - **FR-047**: Before each LLM call, the extension MUST display exactly what will be
@@ -512,6 +611,16 @@ the bundled snapshot is used and the UI reflects the offline status — deliveri
   hash, original snippet, replacement snippet, and rationale string.
 - **Checkpoint**: A Git commit/stash or backup copy set created immediately before any
   workspace write, enabling full rollback.
+- **User Setup**: The persisted platform choice, enabled models per provider and Enhance
+  model (never key values).
+- **Confirmed Phase**: A BUILD or RUNTIME phase in the Project Profile with a catalog
+  phase type, verified or edited by the user in Enhance.
+- **Stage**: One of Enhance, Estimate, Optimize, Implement, each with a typed input and
+  output. Only Enhance and Implement may call an LLM.
+- **Agent Skill**: A folder with `SKILL.md` and supporting files that expresses one
+  strategy for a host development agent to discover and use.
+- **Hand-off Prompt**: The single reviewed implementation prompt sent to the host IDE
+  agent when the chat mechanism is used.
 
 ---
 
@@ -536,7 +645,7 @@ the bundled snapshot is used and the UI reflects the offline status — deliveri
 - **SC-008**: All catalog-defined strategy guidance files and platform command files
   are generated to catalog-declared paths without any hard-coded path strings in
   extension source code.
-- **SC-009**: The "Apply now" flow leaves the workspace unchanged if the user cancels
+- **SC-009**: The IDE agent route leaves the workspace unchanged if the user cancels
   at any stage before the final apply confirmation; verified by automated test.
 - **SC-010**: A developer can see a before/after token count preview for any approved
   strategy on their own pasted content without triggering an LLM call (for
@@ -544,8 +653,22 @@ the bundled snapshot is used and the UI reflects the offline status — deliveri
 
 ---
 
+## Out of Scope for v1 (future scope)
+
+- Model routing (choosing a model per request at runtime). A strategy in the
+  `model-strategy` group may exist as written guidance only; no router is built.
+- "jev": deferred by the project owner.
+- Usage and efficiency analysis of each agent used in the project. The audit (FR-042)
+  compares static token counts with a baseline and is not agent usage analysis.
+- Accounts, server-side storage of user data or keys, cross-device sync, billing,
+  automatic price scraping, and agents running outside an IDE host.
+
+---
+
 ## Assumptions
 
+- The product is a four-stage pipeline (Enhance, Estimate, Optimize, Implement); the
+  stages are called agents in the project brief. Estimate and Optimize are deterministic.
 - Users have a VS Code-family IDE (VS Code, Antigravity IDE, Cursor, Windsurf, or an
   installable fork) capable of running extensions from the Marketplace or Open VSX.
 - The extension targets single-tenant, local-machine use; no server-side storage or
@@ -555,7 +678,7 @@ the bundled snapshot is used and the UI reflects the offline status — deliveri
 - The GitHub Copilot Language Model API path is available only when the user already
   has an active Copilot subscription and has granted consent; no consent is implied
   by the extension.
-- Workspace scanning for pre-fill and Apply now detection operates only on files within
+- Workspace scanning for pre-fill and IDE agent route detection operates only on files within
   the open workspace folders; it does not traverse above the workspace root.
 - The audit command uses the same estimation formulas and catalog version as the
   original baseline; it does not re-call an LLM to produce numbers.
@@ -563,6 +686,6 @@ the bundled snapshot is used and the UI reflects the offline status — deliveri
   requires a local extension host.
 - Automatic model price scraping, billing integration, and cloud account management
   are explicitly out of scope for v1 (as stated in non-goals).
-- Apply now detection covers TypeScript/JavaScript and Python files in v1; support for
+- IDE agent route detection covers TypeScript/JavaScript and Python files in v1; support for
   additional languages (Go, Java, C#, Rust, etc.) is a post-v1 addition and requires
   no architectural changes to the detection pipeline.

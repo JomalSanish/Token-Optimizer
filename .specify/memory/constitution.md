@@ -1,14 +1,20 @@
-﻿<!--
+<!--
 SYNC IMPACT REPORT
 ==================
-Version change: (none) → 1.0.0
+Version change: 1.0.0 → 1.1.0 (PROPOSED: needs the amendment PR and two maintainer approvals)
 Added sections:
-  - Core Principles (Principles I–XI, 11 total)
-  - Technical Guardrails
-  - Development Workflow
-  - Governance
-Modified principles: N/A (initial creation)
-Removed sections: N/A (initial creation)
+  - Principle XII (Staged Pipeline With a Determinism Boundary)
+Modified principles:
+  - VI  Scope limited to writes made by the extension; new files go through a review list and the same single
+        WorkspaceEdit batch; checkpoint required even for all-new files; delegated (host-agent) edits get
+        compensating controls.
+  - VII Adds phase taxonomy, host-model selectors and agent-invocation mechanisms to catalog-owned data;
+        verification reworded (a file path cannot be fetched as a URL).
+  - IX  No silent LLM calls, including calls to the host model API.
+  - X   `artifactPaths` renamed `artifactTargets` to match the data model; adapter package named generically.
+  - XI  Feature directory is `specs/<id>/` (what the Spec-Kit scripts use), not `specs/<id>/`.
+Technical Guardrails: one row added (LLM only in Enhance and Implement).
+Removed sections: none
 Deferred TODOs: none
 -->
 
@@ -152,12 +158,14 @@ and the project.
 
 ### VI. Nothing Written Without Review
 
-Every code or file change proposed by the extension MUST go through a **diff
-view** presented to the user with per-hunk accept/reject controls before
-anything is written to disk. All accepted changes MUST be applied as a
-**single, undoable `WorkspaceEdit` batch**.
+Every code or file change **made by the extension** MUST be shown to the user
+for review before anything is written to disk. Changes to existing code MUST be
+shown in a **diff view** with per-hunk accept/reject controls; new files MUST be
+shown in a list of files to be created. All accepted changes, including file
+creation, MUST be applied as a **single, undoable `WorkspaceEdit` batch**.
 
-Before applying any batch, the extension MUST create a checkpoint:
+Before applying any batch, the extension MUST create a checkpoint, even when
+every file in the batch is new:
 - If a Git repository is detected: perform a `git stash` or an auto-commit
   (`git commit --no-verify -m "token-optimizer: pre-apply checkpoint"`).
 - Otherwise: write backup copies of all affected files to
@@ -166,27 +174,45 @@ Before applying any batch, the extension MUST create a checkpoint:
 Generated or suggested files MUST NEVER silently overwrite a user-edited file.
 If the target file has been modified since the last known checkpoint, the
 extension MUST prompt the user for explicit confirmation before proceeding.
+Anchors MUST be re-validated against the current file contents immediately
+before applying.
+
+**Delegated edits.** When the extension hands the work to the host IDE's own
+agent (chat hand-off), that agent's edits are outside the extension's diff
+review and the extension itself writes nothing. In that case the extension MUST
+(a) create the checkpoint and capture the audit baseline before dispatch,
+(b) tell the user before dispatch that the edits will not go through this
+review, (c) never submit the prompt automatically, and (d) offer rollback to the
+checkpoint and the audit afterwards.
 
 **Rationale**: AI-applied edits that cannot be undone or that silently destroy
 user work are unacceptable. Checkpointing and atomic workspace edits are the
-minimum safety guarantees.
+minimum safety guarantees; where the extension cannot review the edits, it
+must still make them recoverable and make the loss of review explicit.
 
 **Verification**:
 - Integration tests mock `vscode.workspace.applyEdit` and assert it is called
-  exactly once per accepted batch (no partial writes).
+  exactly once per accepted batch, including a batch of only new files (no
+  partial writes, no direct `fs` writes).
 - A test asserts that when a target file's mtime is newer than the last
-  checkpoint timestamp, a confirmation dialog is shown before any write.
+  checkpoint timestamp, a confirmation dialog is shown before any write, and
+  that a file edited while its diff is open is flagged stale.
 - E2E test verifies that `Ctrl+Z` (Undo) after an applied batch restores all
   affected files to their pre-edit state.
+- A chat hand-off test asserts: checkpoint exists before the host command runs,
+  the prompt is pre-filled and not submitted, and the extension performed no
+  workspace write.
 
 ---
 
 ### VII. Data-Driven Catalog
 
-Providers, models, pricing (including historical price records), optimization
-strategies (with implementation guidance), platform definitions (detection
-heuristics and artifact paths), and prompt templates MUST reside in the
-**catalog**, not hard-coded in extension source files.
+Providers (including host language-model selectors such as vendor and family),
+models, pricing (including historical price records), the phase taxonomy,
+optimization strategies (with implementation guidance), platform definitions
+(detection heuristics, artifact targets and agent-invocation mechanisms such as
+chat commands), and prompt templates MUST reside in the **catalog**, not
+hard-coded in extension source files.
 
 Adding a new model, provider, or strategy MUST require only a catalog entry
 update — no extension release is required for data-only additions. Platform
@@ -200,8 +226,14 @@ or model changes.
 **Verification**:
 - A Zod schema validates every catalog entry at load time; malformed entries
   are rejected with a structured error (not silently ignored).
-- The catalog CI job fetches platform documentation URLs and asserts that each
-  declared artifact path resolves to a non-404 response.
+- The catalog CI job fetches each platform's `docsUrl` and asserts a non-404
+  response and a `verifiedAt` newer than the configured age limit; a platform
+  entry is served only after a maintainer has checked its artifact targets and
+  invocation mechanisms against that documentation (a repository path such as a
+  skills folder cannot be fetched as a URL, so this check is human-confirmed).
+- A grep/ESLint check fails the build if a model name, host-model vendor or
+  family, chat command id or platform artifact path appears as a literal in
+  extension source.
 - A unit test confirms that adding a catalog entry with a new model ID causes
   `estimate()` to use that model without any source-code change.
 
@@ -237,7 +269,8 @@ for every strategy surfaced to users.
 Before each LLM call, the extension MUST display to the user exactly what will
 be sent: the project description, any code snippets, and the prompt template
 in use. The user MUST be able to review and cancel before the request is
-dispatched.
+dispatched. No LLM call, including a call to the host IDE's model API, may be
+made silently.
 
 The extension MUST support a **"Copilot only / no external keys"** mode in
 which no requests are sent to any external provider. In this mode, all LLM
@@ -269,7 +302,7 @@ transparency and control over what leaves their machine.
 
 The `@token-optimizer/core` package MUST contain zero imports from `vscode`
 or any IDE-specific namespace. All IDE integration MUST live in platform-specific
-adapter packages (`@token-optimizer/vscode-adapter`, etc.).
+adapter code outside core (the extension package).
 
 Platform artifact paths (settings files, extension directories, workspace roots)
 MUST come from the catalog, not from hard-coded strings in the adapter code.
@@ -284,8 +317,8 @@ makes unit testing difficult, and blocks future multi-platform support.
   under `packages/core/` contains the string `"vscode"` as an import source.
 - Unit tests for `@token-optimizer/core` run in a plain Node.js environment
   with no VS Code test runner; they MUST pass without any VS Code extension host.
-- A catalog CI job validates that each `platforms[].artifactPaths` entry resolves
-  to a documented path for the corresponding platform version.
+- A catalog CI job validates that each `platforms[].artifactTargets` entry is
+  marked as checked against the documentation for the corresponding platform version.
 
 ---
 
@@ -309,10 +342,38 @@ gate catches ambiguities when they are cheapest to resolve.
 
 **Verification**:
 - CI asserts that every merged PR targeting `main` has a corresponding
-  `.specify/features/<feature-id>/` directory with `spec.md`, `plan.md`, and
+  `specs/<feature-id>/` directory with `spec.md`, `plan.md`, and
   `tasks.md` present and non-empty.
 - A pre-commit hook runs `speckit-analyze` on the current feature directory and
   exits non-zero if any unresolved `FAIL` findings remain.
+
+---
+
+### XII. Staged Pipeline With a Determinism Boundary
+
+The product MUST be built as four stages with typed inputs and outputs:
+**Enhance**, **Estimate**, **Optimize**, **Implement**. Only Enhance and
+Implement MAY invoke an LLM. Estimate and Optimize MUST be pure functions of
+their inputs and the catalog: Estimate computes tokens and cost for the phases
+in the Project Profile, and Optimize pre-selects strategies by evaluating
+catalog predicates against the profile, its phase types and the estimate.
+
+Phases are part of the Project Profile. An LLM MAY propose them in Enhance, but
+the user MUST confirm them before the profile can be finalised, and every later
+stage MUST treat them as profile data, not as LLM output.
+
+**Rationale**: Splitting the product at the point where LLM judgement ends and
+auditable computation begins keeps Principle IV enforceable and makes each stage
+independently testable.
+
+**Verification**:
+- Stage input and output types live in `@token-optimizer/core` with no IDE
+  imports.
+- A test injects spy provider and host-model adapters and asserts the Estimate
+  and Optimize stages make zero calls.
+- A golden test shows two profiles that differ only in their confirmed phases
+  produce different estimates and, where a catalog predicate depends on the
+  phase, a different pre-selected strategy set.
 
 ---
 
@@ -333,6 +394,7 @@ enforced at the build and CI level. Violations MUST fail the build.
 | No MongoDB URI or write-credential strings in bundle | Semgrep pattern scan; match = build failure |
 | No `vscode` import in `packages/core/` | ESLint `no-restricted-imports` rule |
 | Secrets never passed to webview or logger | ESLint `no-key-in-webview` custom rule; Semgrep scan |
+| LLM calls only from the Enhance and Implement stages | Spy-adapter tests on Estimate and Optimize; no adapter imports in those modules |
 
 ---
 
@@ -341,11 +403,11 @@ enforced at the build and CI level. Violations MUST fail the build.
 All contributors MUST follow the spec-driven workflow defined in Principle XI.
 The steps below elaborate on process expectations:
 
-1. **Specify**: Create `.specify/features/<id>/spec.md` via `/speckit-specify`.
+1. **Specify**: Create `specs/<id>/spec.md` via `/speckit-specify`.
 2. **Clarify**: Run `/speckit-clarify` to surface and resolve ambiguities
    before planning begins.
-3. **Plan**: Generate `.specify/features/<id>/plan.md` via `/speckit-plan`.
-4. **Tasks**: Generate `.specify/features/<id>/tasks.md` via `/speckit-tasks`.
+3. **Plan**: Generate `specs/<id>/plan.md` via `/speckit-plan`.
+4. **Tasks**: Generate `specs/<id>/tasks.md` via `/speckit-tasks`.
 5. **Analyze**: Run `/speckit-analyze` after each phase; resolve all findings.
 6. **Implement**: Execute tasks via `/speckit-implement` in dependency order.
 7. **Converge**: If implementation diverges, run `/speckit-converge` to surface
@@ -390,4 +452,4 @@ README-level practices. In cases of conflict, the constitution wins.
 All PRs and code reviews MUST verify that no principle listed here is violated.
 Complexity that cannot be justified against these principles MUST NOT be merged.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-07 | **Last Amended**: 2026-10-07
+**Version**: 1.1.0 (proposed) | **Ratified**: 2026-10-07 | **Last Amended**: 2026-10-08 (pending amendment PR)
