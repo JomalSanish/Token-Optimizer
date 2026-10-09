@@ -9,16 +9,90 @@ import {
 } from "@token-optimizer/core";
 import type { MessageRouter } from "../webview/MessageRouter.js";
 
+export interface CatalogUrlValidation {
+  isValid: boolean;
+  isOfflineMode: boolean;
+  validatedUrl?: string;
+  reason?: string;
+}
+
+export function validateCatalogApiUrl(rawUrl: string | undefined | null): CatalogUrlValidation {
+  // If undefined/null, use the official default endpoint
+  if (rawUrl === undefined || rawUrl === null) {
+    return {
+      isValid: true,
+      isOfflineMode: false,
+      validatedUrl: "https://catalog.token-optimizer.dev/v1",
+    };
+  }
+
+  const trimmed = rawUrl.trim();
+  // Empty value declares air-gapped offline-only mode
+  if (trimmed === "") {
+    return {
+      isValid: true,
+      isOfflineMode: true,
+      reason: "Empty catalogApiUrl configured: running in air-gapped offline-only mode.",
+    };
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    // Credentials check (Principle I & III guardrails: never allow credentials in catalog URL)
+    if (parsed.username || parsed.password) {
+      return {
+        isValid: false,
+        isOfflineMode: true,
+        reason: "Catalog API URL must not contain credentials/userinfo.",
+      };
+    }
+
+    // Protocol check: https:// only, except http:// allowed solely on localhost or 127.0.0.1 for local dev
+    if (parsed.protocol === "https:") {
+      return {
+        isValid: true,
+        isOfflineMode: false,
+        validatedUrl: trimmed.replace(/\/+$/, ""),
+      };
+    }
+
+    if (
+      parsed.protocol === "http:" &&
+      (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1")
+    ) {
+      return {
+        isValid: true,
+        isOfflineMode: false,
+        validatedUrl: trimmed.replace(/\/+$/, ""),
+      };
+    }
+
+    return {
+      isValid: false,
+      isOfflineMode: true,
+      reason: "Catalog API URL must use https:// (http:// is only allowed for localhost / 127.0.0.1).",
+    };
+  } catch {
+    return {
+      isValid: false,
+      isOfflineMode: true,
+      reason: `Malformed catalog API URL: '${trimmed}'.`,
+    };
+  }
+}
+
 export interface CatalogServiceOptions {
   client?: CatalogClient;
   loader?: BundledSnapshotLoader;
   bundledSnapshotPath?: string;
   refreshIntervalMs?: number;
+  catalogApiUrl?: string;
 }
 
 export class CatalogService implements vscode.Disposable {
   private currentSnapshot: CatalogSnapshot | null = null;
   private offline = false;
+  private isAirGapped = false;
   private refreshTimer?: ReturnType<typeof setInterval>;
   private client: CatalogClient;
   private loader: BundledSnapshotLoader;
@@ -38,10 +112,23 @@ export class CatalogService implements vscode.Disposable {
       },
     };
 
-    const baseUrl =
-      (typeof vscode !== "undefined" &&
-        vscode.workspace?.getConfiguration?.("tokenOptimizer")?.get<string>("catalogUrl")) ||
-      "https://catalog.token-optimizer.dev/v1";
+    const config =
+      typeof vscode !== "undefined" &&
+      vscode.workspace?.getConfiguration?.("tokenOptimizer");
+    const rawUrl =
+      options.catalogApiUrl !== undefined
+        ? options.catalogApiUrl
+        : config
+          ? config.get<string>("catalogApiUrl")
+          : undefined;
+
+    const validation = validateCatalogApiUrl(rawUrl);
+    if (!validation.isValid) {
+      console.warn(`[CatalogService] ${validation.reason} Falling back to bundled snapshot.`);
+    }
+
+    this.isAirGapped = validation.isOfflineMode;
+    const baseUrl = validation.validatedUrl || "https://catalog.token-optimizer.dev/v1";
 
     this.client =
       options.client ??
@@ -70,29 +157,37 @@ export class CatalogService implements vscode.Disposable {
   }
 
   public async initialize(): Promise<CatalogSnapshot> {
-    try {
-      const res = await this.client.getCatalogSnapshot();
-      this.currentSnapshot = res.snapshot;
-      this.offline = res.isOffline;
-    } catch (err) {
-      console.warn(
-        "[CatalogService] Failed to fetch catalog from remote/cache; falling back to bundled snapshot:",
-        err
-      );
+    if (this.isAirGapped) {
+      console.info("[CatalogService] Operating in air-gapped offline snapshot mode (zero network calls).");
+      this.currentSnapshot = await this.loader.load(this.bundledSnapshotPath);
+      this.offline = true;
+    } else {
       try {
-        this.currentSnapshot = await this.loader.load(this.bundledSnapshotPath);
-        this.offline = true;
-      } catch (loadErr) {
-        console.error(
-          "[CatalogService] Critical: Failed to load bundled catalog snapshot:",
-          loadErr
+        const res = await this.client.getCatalogSnapshot();
+        this.currentSnapshot = res.snapshot;
+        this.offline = res.isOffline;
+      } catch (err) {
+        console.warn(
+          "[CatalogService] Failed to fetch catalog from remote/cache; falling back to bundled snapshot:",
+          err
         );
-        throw loadErr;
+        try {
+          this.currentSnapshot = await this.loader.load(this.bundledSnapshotPath);
+          this.offline = true;
+        } catch (loadErr) {
+          console.error(
+            "[CatalogService] Critical: Failed to load bundled catalog snapshot:",
+            loadErr
+          );
+          throw loadErr;
+        }
       }
     }
 
     await this.notifyCatalogUpdated();
-    this.scheduleRefresh();
+    if (!this.isAirGapped) {
+      this.scheduleRefresh();
+    }
     return this.currentSnapshot;
   }
 
@@ -141,17 +236,23 @@ export class CatalogService implements vscode.Disposable {
           platforms: this.currentSnapshot.platforms,
           promptTemplates: this.currentSnapshot.promptTemplates,
           isOffline: this.offline,
+          publishedAt: this.currentSnapshot.publishedAt,
         },
       });
     }
   }
 
   private scheduleRefresh(): void {
+    if (this.isAirGapped) {
+      return;
+    }
+
     if (this.refreshTimer) {
       clearInterval(this.refreshTimer);
     }
 
     this.refreshTimer = setInterval(async () => {
+      if (this.isAirGapped) return;
       try {
         const res = await this.client.getCatalogSnapshot();
         if (

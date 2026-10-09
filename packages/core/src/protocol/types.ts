@@ -14,7 +14,7 @@ export type PhaseId = z.infer<typeof schemas.PhaseIdSchema>;
 export type ConfirmedPhase = z.infer<typeof schemas.ConfirmedPhaseSchema>;
 export type TechStackEntry = z.infer<typeof schemas.TechStackEntrySchema>;
 export type ComponentEntry = z.infer<typeof schemas.ComponentEntrySchema>;
-export type ProjectProfile = z.infer<typeof schemas.ProjectProfileSchema>;
+export type { ProjectProfile } from "../profile/schema.js";
 export type Provider = z.infer<typeof schemas.ProviderSchema>;
 export type Model = z.infer<typeof schemas.ModelSchema>;
 export type Pricing = z.infer<typeof schemas.PricingSchema>;

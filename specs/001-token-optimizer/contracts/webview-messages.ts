@@ -129,6 +129,7 @@ export type EnhanceResultMsg = Envelope<"enhance/result", {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  taxonomyBudgetLevel?: "full" | "short" | "compact";
 }>;
 
 /** H→W: Enhance failed */
@@ -159,6 +160,38 @@ export type PhasesUpdatedMsg = Envelope<"enhance/phasesUpdated", {
 export type ProfileFinalizedMsg = Envelope<"enhance/profileFinalized", {
   profileVersion: number;
 }>;
+
+export interface ProfileHistorySummary {
+  version: number;
+  createdAt: string;
+  finalizedAt?: string;
+  phaseCount: number;
+  costUsd?: number;
+}
+
+/** W→H: request profile version history summaries */
+export type EnhanceGetHistoryMsg = Envelope<"enhance/getHistory", Record<string, never>>;
+
+/** W→H: request specific full profile version entry */
+export type EnhanceGetVersionMsg = Envelope<"enhance/getVersion", {
+  version: number;
+}>;
+
+/** W→H: clear profile version history */
+export type EnhanceClearHistoryMsg = Envelope<"enhance/clearHistory", Record<string, never>>;
+
+/** H→W: version history summaries loaded */
+export type EnhanceHistoryLoadedMsg = Envelope<"enhance/historyLoaded", {
+  summaries: ProfileHistorySummary[];
+}>;
+
+/** H→W: specific full profile version loaded */
+export type EnhanceVersionLoadedMsg = Envelope<"enhance/versionLoaded", {
+  entry: ProfileHistoryEntry;
+}>;
+
+/** H→W: profile history successfully cleared */
+export type EnhanceHistoryClearedMsg = Envelope<"enhance/historyCleared", Record<string, never>>;
 
 // ─── Estimation messages ──────────────────────────────────────────────────────
 
@@ -321,6 +354,9 @@ export type HostToWebviewMsg =
   | ApplyCompleteMsg
   | ImplementPlanMsg
   | PhasesUpdatedMsg
+  | EnhanceHistoryLoadedMsg
+  | EnhanceVersionLoadedMsg
+  | EnhanceHistoryClearedMsg
   | HandoffPreviewMsg
   | HandoffResultMsg;
 
@@ -332,6 +368,9 @@ export type WebviewToHostMsg =
   | SetEnhanceModelMsg
   | EnhanceRunMsg
   | FinalizeProfileMsg
+  | EnhanceGetHistoryMsg
+  | EnhanceGetVersionMsg
+  | EnhanceClearHistoryMsg
   | EstimateRequestMsg
   | StrategySetMsg
   | OptimizeGenerateMsg

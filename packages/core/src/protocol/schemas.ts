@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ProjectProfileSchema } from "../profile/schema.js";
 
 // ─── Primitive / Helper Schemas ─────────────────────────────────────────────
 
@@ -73,49 +74,7 @@ export const ComponentEntrySchema = z
   })
   .strict();
 
-export const ProjectProfileSchema = z
-  .object({
-    schemaVersion: z.string().default("1.0"),
-    projectType: z.string().min(1).max(100),
-    overview: z.string().max(10000),
-    techStack: z.array(TechStackEntrySchema).default([]),
-    llm: z
-      .object({
-        providers: z.array(z.string().max(100)).default([]),
-        usesRag: z.boolean().default(false),
-        usesAgents: z.boolean().default(false),
-        agentCount: z.number().int().nonnegative().optional(),
-        avgPrefixTokens: z.number().int().nonnegative().optional(),
-        avgPromptTokens: z.number().int().nonnegative(),
-        avgOutputTokens: z.number().int().nonnegative(),
-        avgConversationTurns: z.number().int().nonnegative().optional(),
-      })
-      .strict(),
-    components: z.array(ComponentEntrySchema).default([]),
-    dataFlow: z.string().default(""),
-    scale: z
-      .object({
-        requestsPerDay: z.number().int().nonnegative(),
-        peakMultiplier: z.number().nonnegative().default(1),
-        usersPerDay: z.number().int().nonnegative().optional(),
-        sessionsPerUserPerDay: z.number().nonnegative().optional(),
-        monthlyDays: z.number().int().min(1).max(31).optional(),
-      })
-      .strict(),
-    buildAssumptions: z
-      .object({
-        teamSize: z.number().int().positive().default(1),
-        sprintWeeks: z.number().int().positive().default(2),
-        iterationsPerFeature: z.number().int().positive().default(1),
-      })
-      .strict(),
-    phases: z.array(ConfirmedPhaseSchema).default([]),
-    constraints: z.array(z.string().max(500)).default([]),
-    profileVersion: z.number().int().positive(),
-    createdAt: z.string(),
-    finalizedAt: z.string().optional(),
-  })
-  .strict();
+// ProjectProfileSchema is canonically defined in and exported from ../profile/schema.js (T057)
 
 export const ProviderSchema = z
   .object({
@@ -440,6 +399,7 @@ export const CatalogUpdatedMsgSchema = createEnvelope(
       platforms: z.array(PlatformSchema),
       promptTemplates: z.array(PromptTemplateSchema),
       isOffline: z.boolean(),
+      publishedAt: z.string().optional(),
     })
     .strict()
 );

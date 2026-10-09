@@ -6,47 +6,73 @@ import type {
   HostModelAdapter,
   ProviderCompletionResult,
 } from "../pipeline/contracts.js";
+import type {
+  ChatMessage,
+  CompletionOptions,
+  CompletionResult,
+  KeyValidationResult,
+} from "../providers/ProviderAdapter.js";
 import type { EstimationResult } from "../protocol/types.js";
 
 export class SpyProviderAdapter implements ProviderAdapter {
+  public readonly providerId = "spy-provider";
   public callCount = 0;
   public prompts: string[] = [];
 
+  async validateKey(_getKey?: () => Promise<string>): Promise<KeyValidationResult> {
+    return { valid: true };
+  }
+
+  async listModels(_getKey?: () => Promise<string>): Promise<string[]> {
+    return ["spy-model"];
+  }
+
   async complete(
-    prompt: string,
-    _options?: { signal?: AbortSignal }
-  ): Promise<ProviderCompletionResult> {
+    messagesOrPrompt: ChatMessage[] | string,
+    _getKey?: () => Promise<string>,
+    _options?: CompletionOptions
+  ): Promise<CompletionResult & ProviderCompletionResult> {
     this.callCount++;
-    this.prompts.push(prompt);
-    return {
-      text: JSON.stringify({
-        narrative: "Mock narrative",
-        profile: {
-          schemaVersion: "1.0",
-          projectType: "rag-chatbot",
-          overview: "Mock overview",
-          techStack: [],
-          llm: {
-            providers: ["anthropic"],
-            usesRag: true,
-            usesAgents: false,
-            avgPromptTokens: 500,
-            avgOutputTokens: 200,
-          },
-          components: [],
-          dataFlow: "",
-          scale: { requestsPerDay: 100 },
-          buildAssumptions: { teamSize: 1, sprintWeeks: 2, iterationsPerFeature: 1 },
-          phases: [],
-          constraints: [],
-          profileVersion: 1,
-          createdAt: "2026-10-08T00:00:00.000Z",
+    const promptStr =
+      typeof messagesOrPrompt === "string"
+        ? messagesOrPrompt
+        : JSON.stringify(messagesOrPrompt);
+    this.prompts.push(promptStr);
+
+    const mockData = {
+      narrative: "Mock narrative",
+      profile: {
+        schemaVersion: "1.0",
+        projectType: "rag-chatbot",
+        overview: "Mock overview",
+        techStack: [],
+        llm: {
+          providers: ["anthropic"],
+          usesRag: true,
+          usesAgents: false,
+          avgPromptTokens: 500,
+          avgOutputTokens: 200,
         },
-      }),
+        components: [],
+        dataFlow: "",
+        scale: { requestsPerDay: 100 },
+        buildAssumptions: { teamSize: 1, sprintWeeks: 2, iterationsPerFeature: 1 },
+        phases: [],
+        constraints: [],
+        profileVersion: 1,
+        createdAt: "2026-10-08T00:00:00.000Z",
+      },
+    };
+
+    return {
+      text: JSON.stringify(mockData),
+      content: JSON.stringify(mockData),
       usage: {
         inputTokens: 500,
         outputTokens: 200,
       },
+      inputTokens: 500,
+      outputTokens: 200,
     };
   }
 

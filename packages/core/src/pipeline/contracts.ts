@@ -12,6 +12,9 @@ import type {
   Phase,
   PromptTemplate,
 } from "../protocol/types.js";
+import type { ProviderAdapter } from "../providers/ProviderAdapter.js";
+
+export type { ProviderAdapter };
 
 export interface CatalogContext {
   providers: Provider[];
@@ -33,16 +36,6 @@ export interface ProviderCompletionResult {
   usage?: ProviderUsage;
 }
 
-export interface ProviderAdapter {
-  complete(
-    prompt: string,
-    options?: { signal?: AbortSignal }
-  ): Promise<ProviderCompletionResult>;
-  completeStream?(
-    prompt: string,
-    options?: { signal?: AbortSignal }
-  ): AsyncIterable<string>;
-}
 
 export interface HostModelAdapter {
   sendRequest(

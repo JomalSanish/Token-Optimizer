@@ -26,7 +26,7 @@ describe("Webview Message Protocol Schemas (T011, T012, Principle II)", () => {
         profile: {
           schemaVersion: "1.0",
           projectType: "rag-chatbot",
-          overview: "RAG system",
+          overview: "RAG system for answering technical documentation questions",
           techStack: [{ language: "Python" }],
           llm: {
             providers: ["openai"],
@@ -36,7 +36,7 @@ describe("Webview Message Protocol Schemas (T011, T012, Principle II)", () => {
             avgOutputTokens: 250,
           },
           components: [],
-          dataFlow: "",
+          dataFlow: "User query -> vector search -> LLM synthesis -> response",
           scale: { requestsPerDay: 2000, peakMultiplier: 2 },
           buildAssumptions: { teamSize: 3, sprintWeeks: 2, iterationsPerFeature: 1 },
           phases: [],

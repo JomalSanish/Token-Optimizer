@@ -40,7 +40,18 @@
         "command": "tokenOptimizer.openPanel",
         "title": "Token Optimizer: Open Optimizer Panel"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Token Optimizer",
+      "properties": {
+        "tokenOptimizer.catalogApiUrl": {
+          "type": "string",
+          "default": "https://catalog.token-optimizer.dev/v1",
+          "description": "Catalog API endpoint URL for remote pricing and model definitions. Leave empty for offline-only mode (uses bundled snapshot).",
+          "scope": "machine"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "pnpm run build",

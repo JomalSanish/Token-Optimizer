@@ -22,7 +22,9 @@ import type {
   EstimationResult,
   Strategy,
   Provider,
+  Model,
   SavingsRange,
+  Phase as CatalogPhase,
 } from "@token-optimizer/core";
 
 type TabId = "enhance" | "estimate" | "optimize" | "implement" | "settings";
@@ -40,7 +42,9 @@ export const App: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<TabId>(initialSavedState.activeTab || "enhance");
   const [isOffline, setIsOffline] = useState(false);
+  const [catalogPublishedAt, setCatalogPublishedAt] = useState<string | null>(null);
   const [platform, setPlatform] = useState("vscode");
+  const [catalogPhases, setCatalogPhases] = useState<CatalogPhase[]>([]);
 
   // Enhance state
   const [profile, setProfile] = useState<ProjectProfile | null>(initialSavedState.profile || null);
@@ -64,6 +68,7 @@ export const App: React.FC = () => {
 
   // Auth / Settings state
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [models, setModels] = useState<Model[]>([]);
   const [configuredKeys, setConfiguredKeys] = useState<
     Array<{
       providerId: string;
@@ -111,7 +116,12 @@ export const App: React.FC = () => {
         case "catalog/updated":
           setStrategies(msg.payload.strategies);
           setProviders(msg.payload.providers);
+          setModels(msg.payload.models);
+          setCatalogPhases(msg.payload.phases || []);
           setIsOffline(msg.payload.isOffline);
+          if (msg.payload.publishedAt) {
+            setCatalogPublishedAt(msg.payload.publishedAt);
+          }
           break;
 
         case "auth/state":
@@ -170,6 +180,35 @@ export const App: React.FC = () => {
           setNarrative(msg.payload.narrative);
           setProfile(msg.payload.profile);
           setEnhanceCostUsd(msg.payload.costUsd);
+          break;
+
+        case "enhance/phasesUpdated":
+          setProfile((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  profileVersion: msg.payload.profileVersion,
+                  phases: msg.payload.phases,
+                }
+              : null
+          );
+          if (msg.payload.problems && msg.payload.problems.length > 0) {
+            setErrorBanner(
+              `Phase validation issue: ${msg.payload.problems.map((p) => `${p.phaseId} (${p.problem})`).join(", ")}`
+            );
+          }
+          break;
+
+        case "enhance/profileFinalized":
+          setProfile((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  profileVersion: msg.payload.profileVersion,
+                  finalizedAt: new Date().toISOString(),
+                }
+              : null
+          );
           break;
 
         case "enhance/error":
@@ -240,7 +279,12 @@ export const App: React.FC = () => {
         <div className="flex items-center gap-2">
           {isOffline ? (
             <span className="flex items-center gap-1 text-[11px] text-amber-400 bg-amber-950/40 border border-amber-800/40 px-2 py-0.5 rounded-full">
-              <WifiOff className="w-3 h-3" /> Offline Fallback
+              <WifiOff className="w-3 h-3" />
+              <span>
+                {catalogPublishedAt
+                  ? `Snapshot from ${new Date(catalogPublishedAt).toISOString().split("T")[0]}`
+                  : "Offline Fallback"}
+              </span>
             </span>
           ) : (
             <span className="flex items-center gap-1 text-[11px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-2 py-0.5 rounded-full">
@@ -271,6 +315,7 @@ export const App: React.FC = () => {
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
+
           return (
             <button
               key={item.id}
@@ -283,6 +328,9 @@ export const App: React.FC = () => {
             >
               <Icon className="w-3.5 h-3.5" />
               <span>{item.label}</span>
+              {item.id === "estimate" && profile?.finalizedAt && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Profile Finalized" />
+              )}
             </button>
           );
         })}
@@ -297,6 +345,8 @@ export const App: React.FC = () => {
             isStreaming={isEnhanceStreaming}
             costUsd={enhanceCostUsd}
             enhanceModel={enhanceModel}
+            catalogPhases={catalogPhases}
+            onProfileSelect={setProfile}
           />
         )}
 
@@ -332,6 +382,7 @@ export const App: React.FC = () => {
             configuredKeys={configuredKeys}
             copilotAvailable={copilotAvailable}
             providers={providers}
+            models={models}
           />
         )}
       </main>
