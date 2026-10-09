@@ -35,6 +35,9 @@ describe("Packaged Extension Runtime Smoke Test (Finding 1)", () => {
         joinPath: (...parts: unknown[]) => parts.join("/"),
         file: (p: string) => ({ fsPath: p, toString: () => p }),
       },
+      workspace: {
+        getConfiguration: () => ({ get: () => undefined }),
+      },
     };
 
     // Override require cache for 'vscode'
@@ -59,6 +62,11 @@ describe("Packaged Extension Runtime Smoke Test (Finding 1)", () => {
       // Test activating with mock context
       const mockContext = {
         extensionUri: { fsPath: extDir, toString: () => extDir },
+        extensionPath: extDir,
+        globalState: {
+          get: () => undefined,
+          update: async () => {},
+        },
         subscriptions: [],
       };
       extensionModule.activate(mockContext);

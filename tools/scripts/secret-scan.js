@@ -51,6 +51,15 @@ const IGNORE_DIRS = new Set([
   "coverage",
 ]);
 
+// Git-ignored local environment files (contain real local dev credentials; never committed)
+const IGNORE_FILES = new Set([
+  ".env",
+  ".env.local",
+  ".env.development",
+  ".env.test",
+  ".env.production",
+]);
+
 export function scanFile(filePath, violations = []) {
   if (!fs.existsSync(filePath)) return violations;
   // Skip secret scanner script itself and tests to avoid self-matching
@@ -81,13 +90,13 @@ export function scanDirectory(dir, violations = []) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
 
   for (const entry of entries) {
-    if (IGNORE_DIRS.has(entry.name)) continue;
+    if (IGNORE_DIRS.has(entry.name) || IGNORE_FILES.has(entry.name)) continue;
     const fullPath = path.join(dir, entry.name);
 
     if (entry.isDirectory()) {
       scanDirectory(fullPath, violations);
     } else if (entry.isFile()) {
-      // scan source, config, and env files
+      // scan source, config, and env templates (e.g., .env.example)
       if (
         /\.(ts|tsx|js|jsx|json|yaml|yml|md|html)$/i.test(entry.name) ||
         entry.name.startsWith(".env")
@@ -111,10 +120,11 @@ export function scanRepo(rootDir = process.cwd()) {
     }
   }
 
-  // Also scan root config and .env files
+  // Also scan root config and template env files
   const rootEntries = fs.readdirSync(rootDir, { withFileTypes: true });
   for (const entry of rootEntries) {
     if (entry.isFile()) {
+      if (IGNORE_FILES.has(entry.name)) continue;
       if (
         /\.(ts|js|json|yaml|yml|md)$/i.test(entry.name) ||
         entry.name.startsWith(".env")

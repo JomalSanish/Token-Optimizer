@@ -246,7 +246,25 @@ export const StrategySchema = z
     reviewedAt: z.string().optional(),
     version: z.number().int().positive().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (s) => {
+      if (s.reviewStatus === "approved") {
+        return (
+          typeof s.reviewedBy === "string" &&
+          s.reviewedBy.trim().length > 0 &&
+          typeof s.reviewedAt === "string" &&
+          s.reviewedAt.trim().length > 0
+        );
+      }
+      return true;
+    },
+    {
+      message:
+        "Principle VIII: Approved strategies must record a named human reviewer in 'reviewedBy' and timestamp in 'reviewedAt'",
+      path: ["reviewedBy"],
+    }
+  );
 
 export const PlatformSchema = z
   .object({
@@ -263,6 +281,8 @@ export const PlatformSchema = z
       z
         .object({
           kind: z.string(),
+          layout: z.enum(["file", "directory"]).optional(),
+          defaultEnabled: z.boolean().optional(),
           pathTemplate: WorkspaceRelativePathSchema,
           format: z.string(),
           frontmatterTemplate: z.string().optional(),
@@ -287,7 +307,7 @@ export const PromptTemplateSchema = z
     version: z.number().int().positive(),
     purpose: z.enum(["enhance", "profile-extract", "apply-edit", "preview", "handoff"]),
     template: z.string(),
-    outputSchemaRef: z.string().optional(),
+    outputSchemaRef: z.string().nullable().optional(),
     active: z.boolean(),
   })
   .strict();

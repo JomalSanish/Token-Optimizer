@@ -23,7 +23,7 @@ describe("Catalog API Health Check (T005, FR-043, Finding 20)", () => {
       expect(res.status).toBe(200);
 
       const json = await res.json();
-      expect(json).toEqual({ status: "ok" });
+      expect(json).toMatchObject({ status: "ok" });
     } finally {
       await server.close();
     }

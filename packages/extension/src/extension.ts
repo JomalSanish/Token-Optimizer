@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { WebviewProvider } from "./webview/WebviewProvider.js";
+import { CatalogService } from "./catalog/CatalogService.js";
 
 export function activate(context: vscode.ExtensionContext): void {
   const provider = new WebviewProvider(context.extensionUri);
@@ -26,6 +27,14 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(openCommand);
+
+  const catalogService = new CatalogService(context, provider.getRouter());
+  context.subscriptions.push(catalogService);
+
+  // Initialize catalog in background on activation
+  catalogService.initialize().catch((err) => {
+    console.error("[TokenOptimizer] Failed to initialize CatalogService:", err);
+  });
 }
 
 export function deactivate(): void {

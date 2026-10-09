@@ -64,6 +64,8 @@ describe("Principle XII & Principle IV Determinism Boundary (T149)", () => {
       basis: "Empirical benchmark",
     },
     reviewStatus: "approved",
+    reviewedBy: "Ada Lovelace",
+    reviewedAt: "2026-10-08T00:00:00Z",
   };
 
   it("EstimateStage and OptimizeStage type contracts take zero adapters (Principle XII)", () => {
