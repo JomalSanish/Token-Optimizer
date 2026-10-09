@@ -11,7 +11,23 @@ const envCandidates = [
 for (const envPath of envCandidates) {
   if (fs.existsSync(envPath)) {
     try {
-      process.loadEnvFile?.(envPath);
+      if (typeof process.loadEnvFile === "function") {
+        process.loadEnvFile(envPath);
+      } else {
+        const content = fs.readFileSync(envPath, "utf-8");
+        for (const line of content.split("\n")) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("#")) continue;
+          const eqIdx = trimmed.indexOf("=");
+          if (eqIdx !== -1) {
+            const key = trimmed.slice(0, eqIdx).trim();
+            const val = trimmed.slice(eqIdx + 1).trim();
+            if (!process.env[key]) {
+              process.env[key] = val;
+            }
+          }
+        }
+      }
       break;
     } catch {
       // ignore
@@ -27,7 +43,7 @@ if (mongoUri) {
   try {
     client = new MongoClient(mongoUri);
     await client.connect();
-    db = client.db(process.env.MONGODB_DB || "token-optimizer");
+    db = client.db(process.env.MONGODB_DB || "token_optimizer");
     console.log("[Catalog API] Connected to MongoDB database:", db.databaseName);
   } catch (err) {
     console.error("[Catalog API] Failed to connect to MongoDB:", err);

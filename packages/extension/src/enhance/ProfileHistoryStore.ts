@@ -93,15 +93,17 @@ export class ProfileHistoryStore {
     const version = entry.version ?? this.getNextVersion();
     const createdAt = entry.createdAt || new Date().toISOString();
 
+    const effectiveFinalizedAt = entry.finalizedAt ?? entry.profile?.finalizedAt;
     const finalizedEntry: ProfileHistoryEntry = {
       ...entry,
       version,
       createdAt,
+      finalizedAt: effectiveFinalizedAt,
       profile: {
         ...entry.profile,
         profileVersion: version,
         createdAt,
-        finalizedAt: entry.finalizedAt,
+        finalizedAt: effectiveFinalizedAt,
       },
     };
 
@@ -112,11 +114,25 @@ export class ProfileHistoryStore {
     // Sort ascending by version
     updated.sort((a, b) => a.version - b.version);
 
-    // Max 20 versions eviction: retain the latest 20 versions
-    const trimmed =
-      updated.length > MAX_PROFILE_HISTORY_VERSIONS
-        ? updated.slice(updated.length - MAX_PROFILE_HISTORY_VERSIONS)
-        : updated;
+    // Max 20 versions eviction: protect finalized versions by evicting oldest unfinalized drafts first
+    let trimmed = updated;
+    if (updated.length > MAX_PROFILE_HISTORY_VERSIONS) {
+      const excess = updated.length - MAX_PROFILE_HISTORY_VERSIONS;
+      const unfinalized = updated.filter((e) => !e.finalizedAt);
+      const toRemove = new Set<number>();
+      for (let i = 0; i < unfinalized.length && toRemove.size < excess; i++) {
+        toRemove.add(unfinalized[i].version);
+      }
+      if (toRemove.size < excess) {
+        for (const e of updated) {
+          if (!toRemove.has(e.version)) {
+            toRemove.add(e.version);
+            if (toRemove.size === excess) break;
+          }
+        }
+      }
+      trimmed = updated.filter((e) => !toRemove.has(e.version));
+    }
 
     await this.workspaceState.update(PROFILE_HISTORY_STORAGE_KEY, trimmed);
     return finalizedEntry;

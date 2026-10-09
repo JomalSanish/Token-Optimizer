@@ -190,7 +190,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   client
     .connect()
     .then(async () => {
-      const db = client.db();
+      const db = client.db(process.env.MONGODB_DB || "token_optimizer");
       console.log(`Seeding catalog from ${filePath}...`);
       const res = await seedCatalog(db, raw);
       console.log("Seeding completed successfully:", res);

@@ -170,7 +170,12 @@ export const PhaseSchema = z
       })
       .strict(),
     paramHints: z.record(z.string()).optional(),
-    cacheablePrefix: z.boolean().optional(),
+    cacheablePrefix: z
+      .union([
+        z.number().min(0).max(1),
+        z.boolean().transform((b) => (b ? 0.5 : 0)),
+      ])
+      .optional(),
     isDefault: z.boolean().optional(),
   })
   .strict();
@@ -317,10 +322,13 @@ export const PhaseResultSchema = z
   .object({
     phaseId: z.string(),
     phaseName: z.string(),
+    phaseTypeId: z.string().optional(),
+    description: z.string().optional(),
     params: z.record(z.unknown()),
     tokensByModel: z.record(TokenBreakdownSchema),
     costByModel: z.record(CostRangeSchema),
     explainTree: ExplainNodeSchema,
+    explainTreesByModel: z.record(ExplainNodeSchema).optional(),
   })
   .strict();
 
@@ -331,12 +339,26 @@ export const TrackResultSchema = z
   })
   .strict();
 
+export const ScaleMetricsSchema = z
+  .object({
+    requestsPerDay: z.number().nonnegative(),
+    monthlyDays: z.number().nonnegative(),
+    usersPerDay: z.number().nonnegative().optional(),
+    costPerRequest: z.number().nonnegative(),
+    costPerUserDay: z.number().nonnegative(),
+    monthlyCost: z.number().nonnegative(),
+    explainTrees: z.record(ExplainNodeSchema).optional(),
+  })
+  .strict();
+
 export const EstimationResultSchema = z
   .object({
     profileVersion: z.number().int().positive(),
+    catalogVersion: z.number().int().positive().optional(),
     currency: z.literal("USD"),
     build: TrackResultSchema,
     runtime: TrackResultSchema,
+    scaleMetrics: ScaleMetricsSchema.optional(),
     totalExpectedCost: z.number().nonnegative(),
     generatedAt: z.string(),
   })
@@ -609,6 +631,17 @@ export const EstimateResultMsgSchema = createEnvelope(
     .strict()
 );
 
+export const EstimateErrorMsgSchema = createEnvelope(
+  "estimate/error",
+  z
+    .object({
+      operationId: z.string().optional(),
+      error: z.string(),
+      message: z.string(),
+    })
+    .strict()
+);
+
 export const StrategySelectionMsgSchema = createEnvelope(
   "strategy/selection",
   z
@@ -786,6 +819,7 @@ export const HostToWebviewMsgSchema = z.discriminatedUnion("type", [
   EnhanceVersionLoadedMsgSchema,
   EnhanceHistoryClearedMsgSchema,
   EstimateResultMsgSchema,
+  EstimateErrorMsgSchema,
   StrategySelectionMsgSchema,
   SavingsUpdateMsgSchema,
   GenerateProgressMsgSchema,

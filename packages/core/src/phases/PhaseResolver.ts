@@ -40,7 +40,7 @@ export interface ResolvedPhase {
   archetypes: string[];
   defaultParams: Phase["defaultParams"];
   paramHints?: Record<string, string>;
-  cacheablePrefix?: boolean;
+  cacheablePrefix?: number;
 }
 
 /**

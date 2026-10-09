@@ -1,9 +1,13 @@
 import * as vscode from "vscode";
-import type { CatalogSnapshot } from "@token-optimizer/core";
+import {
+  UserSetupStore,
+  type CatalogSnapshot,
+} from "@token-optimizer/core";
 import { KeyService } from "../../secrets/KeyService.js";
 import { KeyValidationService } from "../../secrets/KeyValidationService.js";
 import { PlatformDetector } from "../../platform/PlatformDetector.js";
 import { HostLmAdapter } from "../../lm/HostLmAdapter.js";
+import { VsCodeUserSetupBackend } from "../../setup/VsCodeUserSetupBackend.js";
 import type { MessageRouter } from "../MessageRouter.js";
 
 export interface AuthHandlersOptions {
@@ -22,6 +26,7 @@ export class AuthHandlers {
   private validationService: KeyValidationService;
   private getCatalogSnapshot: () => CatalogSnapshot | null;
   private hostLmAdapter?: HostLmAdapter;
+  private setupStore: UserSetupStore;
 
   constructor(options: AuthHandlersOptions) {
     this.context = options.context;
@@ -30,6 +35,9 @@ export class AuthHandlers {
     this.validationService = options.validationService;
     this.getCatalogSnapshot = options.getCatalogSnapshot;
     this.hostLmAdapter = options.hostLmAdapter;
+    this.setupStore = new UserSetupStore(
+      new VsCodeUserSetupBackend(this.context.globalState)
+    );
   }
 
   public register(): void {
@@ -73,32 +81,43 @@ export class AuthHandlers {
       await this.postAuthState();
     });
 
-    // 3. auth/setEnabledModels
+    // 3. auth/setEnabledModels (persisted via UserSetupStore in globalState)
     this.router.register("auth/setEnabledModels", async (msg) => {
       const { providerId, enabledModels } = msg.payload;
-      await this.context.globalState.update(
-        `enabledModels:${providerId}`,
-        enabledModels
-      );
+      const setup = await this.setupStore.getSetup();
+      await this.setupStore.saveSetup({
+        enabledModelsByProvider: {
+          ...setup.enabledModelsByProvider,
+          [providerId]: enabledModels,
+        },
+      });
       await this.postAuthState();
     });
 
-    // 4. auth/setPlatform
+    // 4. auth/setPlatform (validates against catalog platforms and persists in globalState, T132)
     this.router.register("auth/setPlatform", async (msg) => {
       const { platformId } = msg.payload;
-      await this.context.workspaceState.update("overridePlatform", platformId);
+      const catalog = this.getCatalogSnapshot();
+      if (catalog && catalog.platforms && catalog.platforms.length > 0) {
+        const isValid = catalog.platforms.some((p) => p.id === platformId);
+        if (!isValid) {
+          console.warn(`[AuthHandlers] Unknown platformId rejected: ${platformId}`);
+          return;
+        }
+      }
+      await this.setupStore.saveSetup({ platformId });
       await this.postAuthState();
     });
 
-    // 5. auth/setEnhanceModel
+    // 5. auth/setEnhanceModel (persisted in globalState via UserSetupStore, T131)
     this.router.register("auth/setEnhanceModel", async (msg) => {
-      await this.context.workspaceState.update("enhanceModel", msg.payload);
+      await this.setupStore.saveSetup({ enhanceModel: msg.payload });
       await this.postAuthState();
     });
 
-    // 6. auth/setCopilotOnly
+    // 6. auth/setCopilotOnly (persisted in globalState via UserSetupStore, T131)
     this.router.register("auth/setCopilotOnly", async (msg) => {
-      await this.context.workspaceState.update("copilotOnly", msg.payload.copilotOnly);
+      await this.setupStore.saveSetup({ copilotOnly: msg.payload.copilotOnly });
       await this.postAuthState();
     });
 
@@ -115,9 +134,10 @@ export class AuthHandlers {
   public async postAuthState(): Promise<void> {
     const catalog = this.getCatalogSnapshot();
     const providers = catalog?.providers || [];
+    const setup = await this.setupStore.getSetup();
 
     // 1. Determine platform
-    const overriddenPlatform = this.context.workspaceState.get<string>("overridePlatform");
+    const overriddenPlatform = setup.platformId;
     let detectedPlatformId = "vscode";
     if (catalog) {
       try {
@@ -140,8 +160,7 @@ export class AuthHandlers {
     // 2. Determine configured keys (masked only)
     const configuredKeysRaw = await this.keyService.listConfigured(providers);
     const configuredKeys = configuredKeysRaw.map((k) => {
-      const enabled =
-        this.context.globalState.get<string[]>(`enabledModels:${k.providerId}`) || [];
+      const enabled = setup.enabledModelsByProvider[k.providerId] || [];
       return {
         providerId: k.providerId,
         keySlot: k.keySlot,
@@ -155,14 +174,10 @@ export class AuthHandlers {
     if (this.hostLmAdapter) {
       copilotAvailable = await this.hostLmAdapter.isAvailable();
     }
-    const copilotOnly = this.context.workspaceState.get<boolean>("copilotOnly") ?? false;
+    const copilotOnly = setup.copilotOnly;
 
     // 4. Enhance model preference
-    const enhanceModel = this.context.workspaceState.get<{
-      providerId: string;
-      modelId: string;
-      keySlot?: number;
-    }>("enhanceModel");
+    const enhanceModel = setup.enhanceModel;
 
     await this.router.send({
       version: 1,

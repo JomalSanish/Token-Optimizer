@@ -1,7 +1,7 @@
 {
   "version": 2,
   "schemaVersion": "1.0",
-  "publishedAt": "2026-10-09T06:56:50.332Z",
+  "publishedAt": "2026-10-09T00:00:00.000Z",
   "providers": [
     {
       "id": "anthropic",
@@ -257,7 +257,7 @@
       },
       "reviewStatus": "approved",
       "reviewedBy": "Jomal Sanish",
-      "reviewedAt": "2026-10-09T06:56:44.315Z",
+      "reviewedAt": "2026-10-09T00:00:00.000Z",
       "version": 1
     }
   ],
@@ -305,127 +305,6 @@
           "clipboard"
         ]
       }
-    },
-    {
-      "id": "cursor",
-      "label": "Cursor",
-      "detect": {
-        "appNames": [
-          "Cursor"
-        ],
-        "uriSchemes": [
-          "cursor"
-        ],
-        "markerFiles": [
-          ".cursorrules",
-          ".cursor"
-        ]
-      },
-      "artifactTargets": [
-        {
-          "kind": "rule",
-          "layout": "file",
-          "defaultEnabled": true,
-          "pathTemplate": ".cursorrules",
-          "format": "markdown"
-        },
-        {
-          "kind": "skill",
-          "layout": "directory",
-          "defaultEnabled": true,
-          "pathTemplate": ".cursor/skills/{{strategyId}}",
-          "format": "markdown"
-        }
-      ],
-      "docsUrl": "https://docs.cursor.com",
-      "verifiedAt": "2026-10-09T00:00:00Z",
-      "isDefault": false,
-      "agentInvocation": {
-        "mechanisms": [
-          "chat-handoff",
-          "clipboard"
-        ]
-      }
-    },
-    {
-      "id": "windsurf",
-      "label": "Windsurf",
-      "detect": {
-        "appNames": [
-          "Windsurf"
-        ],
-        "uriSchemes": [
-          "windsurf"
-        ],
-        "markerFiles": [
-          ".codeium/windsurf"
-        ]
-      },
-      "artifactTargets": [
-        {
-          "kind": "rule",
-          "layout": "file",
-          "defaultEnabled": true,
-          "pathTemplate": ".windsurfrules",
-          "format": "markdown"
-        },
-        {
-          "kind": "skill",
-          "layout": "directory",
-          "defaultEnabled": true,
-          "pathTemplate": ".windsurf/skills/{{strategyId}}",
-          "format": "markdown"
-        }
-      ],
-      "docsUrl": "https://codeium.com/windsurf",
-      "verifiedAt": "2026-10-09T00:00:00Z",
-      "isDefault": false,
-      "agentInvocation": {
-        "mechanisms": [
-          "clipboard"
-        ]
-      }
-    },
-    {
-      "id": "antigravity",
-      "label": "Antigravity IDE",
-      "detect": {
-        "appNames": [
-          "Antigravity"
-        ],
-        "uriSchemes": [
-          "antigravity"
-        ],
-        "markerFiles": [
-          ".agents"
-        ]
-      },
-      "artifactTargets": [
-        {
-          "kind": "rule",
-          "layout": "file",
-          "defaultEnabled": true,
-          "pathTemplate": ".agents/rules/token-optimizer.md",
-          "format": "markdown"
-        },
-        {
-          "kind": "skill",
-          "layout": "directory",
-          "defaultEnabled": true,
-          "pathTemplate": ".agents/skills/{{strategyId}}",
-          "format": "markdown"
-        }
-      ],
-      "docsUrl": "https://antigravity.google.com/docs",
-      "verifiedAt": "2026-10-09T00:00:00Z",
-      "isDefault": false,
-      "agentInvocation": {
-        "mechanisms": [
-          "lm-edit",
-          "chat-handoff",
-          "clipboard"
-        ]
-      }
     }
   ],
   "promptTemplates": [
@@ -435,30 +314,6 @@
       "purpose": "enhance",
       "template": "Analyze project architecture and generate token optimization profile.\n\nProject:\n{{description}}\n\nPhases:\n{{phasesTaxonomy}}\n\nOutput JSON narrative and profile.",
       "outputSchemaRef": "ProjectProfileSchema",
-      "active": true
-    },
-    {
-      "id": "profile-extract-default",
-      "version": 1,
-      "purpose": "profile-extract",
-      "template": "Extract token profile from codebase.\n\nFiles:\n{{workspaceFiles}}\n\nOutput JSON project profile.",
-      "outputSchemaRef": "ProjectProfileSchema",
-      "active": true
-    },
-    {
-      "id": "apply-edit-default",
-      "version": 1,
-      "purpose": "apply-edit",
-      "template": "Apply token optimization strategy {{strategyName}} to code:\n{{codeSnippet}}\n\nOutput JSON EditProposal.",
-      "outputSchemaRef": "EditProposalSchema",
-      "active": true
-    },
-    {
-      "id": "preview-default",
-      "version": 1,
-      "purpose": "preview",
-      "template": "Preview token reduction for strategy {{strategyName}}.\n\nInput:\n{{inputText}}",
-      "outputSchemaRef": null,
       "active": true
     }
   ]

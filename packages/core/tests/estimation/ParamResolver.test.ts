@@ -70,24 +70,42 @@ describe("ParamResolver (T071, FR-020, clarification Q2)", () => {
     );
   });
 
-  it("throws ParamValidationError when expected < low", () => {
-    const invalidOverride: PhaseOverride = {
+  it("automatically widens default range when expected falls outside defaults (H10)", () => {
+    // Expected less than default low (2) -> widens low to 1
+    const lowOverride: PhaseOverride = {
       phaseId: "test-phase",
-      callsExpected: 1, // sample default callsLow is 2
+      callsExpected: 1,
     };
+    const resolvedLow = resolveParams(sampleDefaultParams, lowOverride);
+    expect(resolvedLow.calls.expected).toBe(1);
+    expect(resolvedLow.calls.low).toBe(1);
 
-    expect(() => resolveParams(sampleDefaultParams, invalidOverride)).toThrowError(
-      ParamValidationError
-    );
+    // Expected greater than default high (5000) -> widens high to 10000
+    const highOverride: PhaseOverride = {
+      phaseId: "test-phase",
+      tokensPerCallExpected: 10000,
+    };
+    const resolvedHigh = resolveParams(sampleDefaultParams, highOverride);
+    expect(resolvedHigh.tokensPerCall.expected).toBe(10000);
+    expect(resolvedHigh.tokensPerCall.high).toBe(10000);
   });
 
-  it("throws ParamValidationError when expected > high", () => {
-    const invalidOverride: PhaseOverride = {
+  it("throws ParamValidationError when explicit override has expected < low or expected > high", () => {
+    const invalidLowOverride: PhaseOverride = {
       phaseId: "test-phase",
-      tokensPerCallExpected: 10000, // sample default high is 5000
+      callsLow: 20,
+      callsExpected: 10,
     };
+    expect(() => resolveParams(sampleDefaultParams, invalidLowOverride)).toThrowError(
+      ParamValidationError
+    );
 
-    expect(() => resolveParams(sampleDefaultParams, invalidOverride)).toThrowError(
+    const invalidHighOverride: PhaseOverride = {
+      phaseId: "test-phase",
+      callsHigh: 30,
+      callsExpected: 50,
+    };
+    expect(() => resolveParams(sampleDefaultParams, invalidHighOverride)).toThrowError(
       ParamValidationError
     );
   });

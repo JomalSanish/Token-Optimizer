@@ -61,21 +61,46 @@ export function resolveParams(
   defaultParams: Phase["defaultParams"],
   override?: PhaseOverride
 ): ResolvedParams {
-  const callsLow = override?.callsLow ?? defaultParams.callsLow;
+  let callsLow = override?.callsLow ?? defaultParams.callsLow;
   const callsExpected = override?.callsExpected ?? defaultParams.callsExpected;
-  const callsHigh = override?.callsHigh ?? defaultParams.callsHigh;
+  let callsHigh = override?.callsHigh ?? defaultParams.callsHigh;
+  // H10: Automatically widen range if expected override falls outside default low/high
+  if (override?.callsExpected !== undefined) {
+    if (override.callsHigh === undefined && callsExpected > callsHigh) {
+      callsHigh = callsExpected;
+    }
+    if (override.callsLow === undefined && callsExpected < callsLow) {
+      callsLow = callsExpected;
+    }
+  }
   validateRange("calls", callsLow, callsExpected, callsHigh);
 
-  const tokensLow = override?.tokensPerCallLow ?? defaultParams.tokensPerCallLow;
+  let tokensLow = override?.tokensPerCallLow ?? defaultParams.tokensPerCallLow;
   const tokensExpected =
     override?.tokensPerCallExpected ?? defaultParams.tokensPerCallExpected;
-  const tokensHigh = override?.tokensPerCallHigh ?? defaultParams.tokensPerCallHigh;
+  let tokensHigh = override?.tokensPerCallHigh ?? defaultParams.tokensPerCallHigh;
+  if (override?.tokensPerCallExpected !== undefined) {
+    if (override.tokensPerCallHigh === undefined && tokensExpected > tokensHigh) {
+      tokensHigh = tokensExpected;
+    }
+    if (override.tokensPerCallLow === undefined && tokensExpected < tokensLow) {
+      tokensLow = tokensExpected;
+    }
+  }
   validateRange("tokensPerCall", tokensLow, tokensExpected, tokensHigh);
 
-  const retriesLow = defaultParams.retriesLow;
+  let retriesLow = defaultParams.retriesLow;
   const retriesExpected =
     override?.retriesExpected ?? defaultParams.retriesExpected;
-  const retriesHigh = defaultParams.retriesHigh;
+  let retriesHigh = defaultParams.retriesHigh;
+  if (override?.retriesExpected !== undefined) {
+    if (retriesExpected > retriesHigh) {
+      retriesHigh = retriesExpected;
+    }
+    if (retriesExpected < retriesLow) {
+      retriesLow = retriesExpected;
+    }
+  }
   validateRange("retries", retriesLow, retriesExpected, retriesHigh);
 
   const volumeLow =
@@ -84,9 +109,12 @@ export function resolveParams(
     override?.volumeMultiplierExpected ??
     defaultParams.volumeMultiplierExpected ??
     1.0;
-  const volumeHigh =
+  let volumeHigh =
     defaultParams.volumeMultiplierHigh ??
     Math.max(1.0, volumeExpected);
+  if (volumeExpected > volumeHigh) {
+    volumeHigh = volumeExpected;
+  }
   validateRange("volumeMultiplier", volumeLow, volumeExpected, volumeHigh);
 
   return {

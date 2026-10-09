@@ -162,4 +162,59 @@ describe("Catalog API Contract Tests (T038, contracts/catalog-api.yaml, Principl
     const rateLimitedServer = buildServer({ db, enableRateLimit: true });
     expect(rateLimitedServer).toBeDefined();
   });
+
+  it("C3 Contract Test: returns 200 on migrated database retaining legacy fields (provider_id, display_name)", async () => {
+    const migratedDb = client.db("migrated_legacy_catalog");
+
+    // Seed legacy documents before running migrations
+    await migratedDb.collection("providers").insertOne({
+      provider_id: "anthropic",
+      display_name: "Anthropic PBC",
+      active: true,
+    });
+    await migratedDb.collection("models").insertOne({
+      model_id: "claude-3-5-sonnet",
+      provider: "anthropic",
+      display_name: "Claude 3.5 Sonnet",
+      context_window: 200000,
+      pricing: {
+        input_per_1m: 3.0,
+        output_per_1m: 15.0,
+      },
+    });
+    await migratedDb.collection("phases").insertOne({
+      phase_id: "scaffold",
+      name: "Project Scaffolding",
+      sort_order: 1,
+      default_cacheable_fraction: 0.5,
+    });
+
+    // Run migrations on the legacy database
+    const migrationsDir = path.resolve(__dirname, "../../migrations");
+    await runMigrations(migratedDb, { migrationsDir });
+
+    const migratedServer = buildServer({ db: migratedDb });
+
+    // Verify GET /v1/catalog succeeds without 503 from Zod strict rejection
+    const catRes = await migratedServer.inject({
+      method: "GET",
+      url: "/v1/catalog",
+    });
+    expect(catRes.statusCode).toBe(200);
+    const catBody = JSON.parse(catRes.body);
+    expect(catBody.providers.length).toBeGreaterThan(0);
+    expect(catBody.providers[0].id).toBe("anthropic");
+    expect(catBody.providers[0].provider_id).toBeUndefined();
+
+    // Verify GET /v1/catalog/providers succeeds
+    const provRes = await migratedServer.inject({
+      method: "GET",
+      url: "/v1/catalog/providers",
+    });
+    expect(provRes.statusCode).toBe(200);
+    const provBody = JSON.parse(provRes.body);
+    expect(provBody.items.length).toBeGreaterThan(0);
+    expect(provBody.items[0].id).toBe("anthropic");
+    expect(provBody.items[0].provider_id).toBeUndefined();
+  });
 });

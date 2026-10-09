@@ -61,13 +61,13 @@ const claudeModel: Model = {
 };
 
 describe("TokenizerLayer (T068, FR-023, clarification Q4)", () => {
-  it("GPT-4 tokenizer returns label: 'exact' without margin", () => {
+  it("GPT-4 tokenizer returns label: 'approximate' with margin when loader is absent (FR-023, H3)", () => {
     expect(TokenizerLayer.getTokenizer).toBe(getTokenizer);
     const tokenizer = getTokenizer(gpt4Model);
     const result = tokenizer.count("Hello, world! This is a test sentence.");
 
-    expect(result.label).toBe("exact");
-    expect(result.margin).toBeUndefined();
+    expect(result.label).toBe("approximate");
+    expect(result.margin).toBe("±15%");
     expect(result.count).toBeGreaterThan(0);
   });
 

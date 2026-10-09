@@ -76,7 +76,11 @@ export class TiktokenTokenizer implements Tokenizer {
 
   count(text: string): TokenizerCountResult {
     if (!text) {
-      return { count: 0, label: "exact" };
+      return {
+        count: 0,
+        label: this.encoder ? "exact" : "approximate",
+        margin: this.encoder ? undefined : "±15%",
+      };
     }
 
     if (this.encoder) {
@@ -87,10 +91,11 @@ export class TiktokenTokenizer implements Tokenizer {
       };
     }
 
-    // Default exact counter using token splitting
+    // FR-023: When WASM encoder is absent, regex fallback must be labelled approximate
     return {
       count: fallbackCountTiktoken(text),
-      label: "exact",
+      label: "approximate",
+      margin: "±15%",
     };
   }
 }

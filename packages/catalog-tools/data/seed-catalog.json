@@ -175,7 +175,7 @@
         "retriesExpected": 1,
         "retriesHigh": 3
       },
-      "cacheablePrefix": false
+      "cacheablePrefix": 0
     },
     {
       "id": "implementation",
@@ -195,7 +195,7 @@
         "retriesExpected": 2,
         "retriesHigh": 5
       },
-      "cacheablePrefix": true
+      "cacheablePrefix": 0.5
     },
     {
       "id": "query-answering",
@@ -205,9 +205,9 @@
       "description": "User queries processed by runtime RAG and generation pipelines.",
       "archetypes": ["rag-chatbot", "general"],
       "defaultParams": {
-        "callsLow": 100,
-        "callsExpected": 1000,
-        "callsHigh": 10000,
+        "callsLow": 1,
+        "callsExpected": 1,
+        "callsHigh": 3,
         "tokensPerCallLow": 500,
         "tokensPerCallExpected": 2000,
         "tokensPerCallHigh": 6000,
@@ -218,7 +218,7 @@
         "volumeMultiplierExpected": 1,
         "volumeMultiplierHigh": 1.5
       },
-      "cacheablePrefix": true
+      "cacheablePrefix": 0.5
     }
   ],
   "strategies": [

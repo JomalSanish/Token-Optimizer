@@ -112,7 +112,7 @@ describe("Enhance View Component (T063, T133, FR-009, FR-012, FR-015, Principle 
               retriesExpected: 0,
               retriesHigh: 1,
             },
-            cacheablePrefix: false,
+            cacheablePrefix: 0,
           },
         ]}
       />

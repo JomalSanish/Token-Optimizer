@@ -6,6 +6,7 @@ import {
   HelpCircle,
   Layers,
   Zap,
+  Lock,
 } from "lucide-react";
 import { vscodeBridge } from "../protocol/vscode";
 import { formatCost } from "../utils/format";
@@ -121,7 +122,7 @@ export const Estimate: React.FC<EstimateProps> = ({
     : [];
   const primaryModelId = modelIds[0] ?? "";
 
-  // Scale metrics for RUNTIME track (FR-021)
+  // Scale metrics for RUNTIME track (FR-021, H4)
   const requestsPerDay = profile?.scale?.requestsPerDay ?? 1000;
   const monthlyDays = profile?.scale?.monthlyDays ?? 22;
   const runtimeMonthlyExpected = estimation
@@ -130,8 +131,55 @@ export const Estimate: React.FC<EstimateProps> = ({
       : estimation.totalExpectedCost
     : 0;
 
-  const costPerRequest = runtimeMonthlyExpected / (requestsPerDay * monthlyDays);
-  const costPerUserDay = runtimeMonthlyExpected / monthlyDays;
+  // Use engine scaleMetrics with fallback to UI calculation
+  const costPerRequest =
+    estimation?.scaleMetrics?.costPerRequest ??
+    (requestsPerDay * monthlyDays > 0
+      ? runtimeMonthlyExpected / (requestsPerDay * monthlyDays)
+      : 0);
+  const costPerUserDay =
+    estimation?.scaleMetrics?.costPerUserDay ??
+    (monthlyDays > 0 ? runtimeMonthlyExpected / monthlyDays : 0);
+
+  // Pricing verification date for display (H8)
+  const activePricingVerifiedAt =
+    estimation?.[activeTrack]?.totalByModel[primaryModelId]?.pricingVerifiedAt ??
+    pricing.find((p) => p.modelId === primaryModelId)?.verifiedAt ??
+    (estimation ? estimation.generatedAt.slice(0, 10) : "");
+
+  // H11 Gating: if profile exists but is not finalized, lock the estimation view
+  if (profile && !profile.finalizedAt) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between glass-panel p-4 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-100">
+                Deterministic Estimation Locked
+              </h2>
+              <p className="text-xs text-slate-400">
+                Project Profile v{profile.profileVersion} must be finalized before estimation
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-panel p-12 rounded-xl border border-amber-900/40 bg-amber-950/10 text-center space-y-3">
+          <Lock className="w-8 h-8 text-amber-500 mx-auto" />
+          <h3 className="text-sm font-semibold text-slate-200">
+            Profile Finalization Required (FR-015 / Principle X)
+          </h3>
+          <p className="text-xs text-slate-400 max-w-md mx-auto">
+            Deterministic token and cost estimation requires a finalized project profile.
+            Please review and confirm your pipeline phases in the Enhance tab and click Finalize Profile.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -236,12 +284,12 @@ export const Estimate: React.FC<EstimateProps> = ({
                 v{estimation.profileVersion}
               </div>
               <span className="text-[10px] text-slate-500 block mt-1 truncate">
-                pricing verified {estimation.generatedAt.slice(0, 10)}
+                pricing verified {activePricingVerifiedAt ? activePricingVerifiedAt.slice(0, 10) : "verified"}
               </span>
             </div>
           </div>
 
-          {/* RUNTIME Track Scale Assumptions Panel (FR-021) */}
+          {/* RUNTIME Track Scale Assumptions Panel (FR-021, H4) */}
           {activeTrack === "runtime" && (
             <div className="glass-panel p-4 rounded-xl border border-indigo-500/30 bg-indigo-950/10 space-y-2">
               <div className="flex items-center justify-between">
@@ -255,20 +303,52 @@ export const Estimate: React.FC<EstimateProps> = ({
               </div>
               <div className="grid grid-cols-3 gap-2 text-center pt-1 font-mono">
                 <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
-                  <span className="text-[10px] text-slate-400 block">Per Request</span>
-                  <span className="text-xs font-bold text-slate-200">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[10px] text-slate-400 block">Per Request</span>
+                    {estimation.scaleMetrics?.explainTrees?.costPerRequest && (
+                      <button
+                        onClick={() =>
+                          openExplain(
+                            estimation.scaleMetrics!.explainTrees!.costPerRequest,
+                            "Explain: Cost Per Request"
+                          )
+                        }
+                        className="text-[10px] text-indigo-400 hover:text-indigo-300 underline font-sans"
+                        aria-label="Explain cost per request"
+                      >
+                        Explain
+                      </button>
+                    )}
+                  </div>
+                  <span className="text-xs font-bold text-slate-200 block mt-0.5">
                     {formatCost(costPerRequest)}
                   </span>
                 </div>
                 <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
-                  <span className="text-[10px] text-slate-400 block">Per User Day</span>
-                  <span className="text-xs font-bold text-slate-200">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[10px] text-slate-400 block">Per User Day</span>
+                    {estimation.scaleMetrics?.explainTrees?.costPerUserDay && (
+                      <button
+                        onClick={() =>
+                          openExplain(
+                            estimation.scaleMetrics!.explainTrees!.costPerUserDay,
+                            "Explain: Cost Per User Day"
+                          )
+                        }
+                        className="text-[10px] text-indigo-400 hover:text-indigo-300 underline font-sans"
+                        aria-label="Explain cost per user day"
+                      >
+                        Explain
+                      </button>
+                    )}
+                  </div>
+                  <span className="text-xs font-bold text-slate-200 block mt-0.5">
                     {formatCost(costPerUserDay)}
                   </span>
                 </div>
                 <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
                   <span className="text-[10px] text-slate-400 block">Per Month</span>
-                  <span className="text-xs font-bold text-indigo-300">
+                  <span className="text-xs font-bold text-indigo-300 block mt-0.5">
                     {formatCost(runtimeMonthlyExpected)}
                   </span>
                 </div>
@@ -276,7 +356,7 @@ export const Estimate: React.FC<EstimateProps> = ({
             </div>
           )}
 
-          {/* Phase List with Editable Assumptions & Descriptions (FR-017, FR-018, FR-020, T134) */}
+          {/* Phase List with Editable Assumptions & Descriptions (FR-017, FR-018, FR-020, T134, H6, H7) */}
           <div className="glass-panel p-5 rounded-xl border border-slate-800 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -298,9 +378,10 @@ export const Estimate: React.FC<EstimateProps> = ({
                   retries?: { expected: number };
                   volumeMultiplier?: { expected: number };
                 };
-                const tokens = phase.tokensByModel[primaryModelId];
-                const cost = phase.costByModel[primaryModelId];
-                const description = getPhaseDescription(phase.phaseId, phase.phaseName);
+                // H6: Direct description from PhaseResult
+                const description =
+                  phase.description ??
+                  getPhaseDescription(phase.phaseTypeId ?? phase.phaseId, phase.phaseName);
 
                 return (
                   <div
@@ -318,13 +399,13 @@ export const Estimate: React.FC<EstimateProps> = ({
                             {phase.phaseId}
                           </span>
                         </div>
-                        {/* Phase Description (T134, FR-018) */}
+                        {/* Phase Description (T134, FR-018, H6) */}
                         <p className="text-xs text-slate-400 mt-1 leading-relaxed">
                           {description}
                         </p>
                       </div>
 
-                      {/* Explain Button */}
+                      {/* Primary Explain Button */}
                       <button
                         onClick={() =>
                           openExplain(phase.explainTree, `Explain: ${phase.phaseName}`)
@@ -338,48 +419,77 @@ export const Estimate: React.FC<EstimateProps> = ({
                       </button>
                     </div>
 
-                    {/* Tokens and Cost Breakdown Row */}
-                    {tokens && cost && (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs font-mono bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">
-                        <div>
-                          <span className="text-[10px] text-slate-500 block font-sans">
-                            Input Tokens
-                          </span>
-                          <span className="text-slate-200">
-                            {tokens.inputTokens.toLocaleString()}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-500 block font-sans">
-                            Output Tokens
-                          </span>
-                          <span className="text-slate-200">
-                            {tokens.outputTokens.toLocaleString()}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-500 block font-sans">
-                            Cached Input
-                          </span>
-                          <span className="text-emerald-400">
-                            {tokens.cachedInputTokens !== undefined
-                              ? tokens.cachedInputTokens.toLocaleString()
-                              : "n/a"}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-500 block font-sans">
-                            Cost Range (USD)
-                          </span>
-                          <span className="text-indigo-300 font-semibold">
-                            {formatCost(cost.expected)}
-                          </span>
-                          <span className="text-[10px] text-slate-500 block">
-                            [{formatCost(cost.low)} - {formatCost(cost.high)}]
-                          </span>
-                        </div>
-                      </div>
-                    )}
+                    {/* Per-Model Columns & Cost Breakdown Table (T073, H7) */}
+                    <div className="overflow-x-auto rounded-lg border border-slate-800/80 bg-slate-950/60 p-2">
+                      <table className="w-full text-left text-xs font-mono">
+                        <thead>
+                          <tr className="text-[10px] text-slate-500 border-b border-slate-800 font-sans">
+                            <th className="pb-1.5 font-medium">Model</th>
+                            <th className="pb-1.5 font-medium">Input Tok</th>
+                            <th className="pb-1.5 font-medium">Output Tok</th>
+                            <th className="pb-1.5 font-medium">Cached Tok</th>
+                            <th className="pb-1.5 font-medium">Low Cost</th>
+                            <th className="pb-1.5 font-medium">Expected</th>
+                            <th className="pb-1.5 font-medium">High Cost</th>
+                            <th className="pb-1.5 font-medium text-right font-sans">Explain</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/40">
+                          {modelIds.map((mId) => {
+                            const mTokens = phase.tokensByModel[mId];
+                            const mCost = phase.costByModel[mId];
+                            const matchedModel = models.find((m) => m.id === mId);
+                            const modelLabel = matchedModel?.label ?? mId;
+                            const mExplain =
+                              phase.explainTreesByModel?.[mId] ?? phase.explainTree;
+
+                            if (!mCost && !mTokens) return null;
+
+                            return (
+                              <tr key={mId} className="hover:bg-slate-900/30">
+                                <td className="py-2 font-sans font-medium text-slate-300">
+                                  {modelLabel}
+                                </td>
+                                <td className="py-2 text-slate-300">
+                                  {mTokens ? mTokens.inputTokens.toLocaleString() : "-"}
+                                </td>
+                                <td className="py-2 text-slate-300">
+                                  {mTokens ? mTokens.outputTokens.toLocaleString() : "-"}
+                                </td>
+                                <td className="py-2 text-emerald-400">
+                                  {mTokens?.cachedInputTokens !== undefined
+                                    ? mTokens.cachedInputTokens.toLocaleString()
+                                    : "n/a"}
+                                </td>
+                                <td className="py-2 text-slate-400">
+                                  {mCost ? formatCost(mCost.low) : "-"}
+                                </td>
+                                <td className="py-2 text-indigo-300 font-semibold">
+                                  {mCost ? formatCost(mCost.expected) : "-"}
+                                </td>
+                                <td className="py-2 text-slate-400">
+                                  {mCost ? formatCost(mCost.high) : "-"}
+                                </td>
+                                <td className="py-2 text-right font-sans">
+                                  <button
+                                    onClick={() =>
+                                      openExplain(
+                                        mExplain,
+                                        `Explain: ${phase.phaseName} (${modelLabel})`
+                                      )
+                                    }
+                                    className="text-[11px] text-indigo-400 hover:text-indigo-300 underline font-medium"
+                                    aria-label={`Explain ${phase.phaseName} for ${mId}`}
+                                  >
+                                    Explain
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
 
                     {/* Editable Assumptions Row (FR-020) */}
                     <div className="pt-1">
@@ -499,7 +609,7 @@ export const Estimate: React.FC<EstimateProps> = ({
             </div>
           </div>
 
-          {/* Extended Model-Comparison Table (T135, FR-024) */}
+          {/* Extended Model-Comparison Table (T135, FR-024, H2) */}
           <div className="glass-panel p-5 rounded-xl border border-slate-800 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -560,8 +670,20 @@ export const Estimate: React.FC<EstimateProps> = ({
                         <td className="py-2.5 font-sans font-medium text-slate-200">
                           {matchedModel?.label ?? mId}
                         </td>
-                        <td className="py-2.5 text-slate-300">${inputPerMTok.toFixed(2)}</td>
-                        <td className="py-2.5 text-slate-300">${outputPerMTok.toFixed(2)}</td>
+                        <td className="py-2.5 text-slate-300">
+                          {matchedPricing ? (
+                            `$${inputPerMTok.toFixed(2)}`
+                          ) : (
+                            <span className="text-amber-400 text-[10px]">Unpriced</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 text-slate-300">
+                          {matchedPricing ? (
+                            `$${outputPerMTok.toFixed(2)}`
+                          ) : (
+                            <span className="text-amber-400 text-[10px]">Unpriced</span>
+                          )}
+                        </td>
                         <td className="py-2.5 text-slate-400">
                           {cachedRate === "no cached pricing data" ? (
                             <span className="text-slate-500 text-[10px] italic">
@@ -628,3 +750,4 @@ export const Estimate: React.FC<EstimateProps> = ({
     </div>
   );
 };
+

@@ -19,16 +19,22 @@ function round4(val: number): number {
   return Math.round(val * 10000) / 10000;
 }
 
+/**
+ * Deterministically finds the active pricing for a model at a reference timestamp.
+ * (H12: Compares timestamps via Date.parse; does not fall back to future-dated prices;
+ * uses catalog.publishedAt as referenceTime for determinism per Principle IV).
+ */
 function findActivePricing(
   modelId: string,
   catalogPricing: Pricing[],
   referenceTime: string
 ): Pricing | null {
+  const refMs = Date.parse(referenceTime);
   const matching = catalogPricing
     .filter((p) => p.modelId === modelId)
     .sort((a, b) => {
-      // Sort effectiveFrom descending
-      return b.effectiveFrom.localeCompare(a.effectiveFrom);
+      // Sort effectiveFrom descending by epoch timestamp
+      return Date.parse(b.effectiveFrom) - Date.parse(a.effectiveFrom);
     });
 
   if (matching.length === 0) {
@@ -36,8 +42,9 @@ function findActivePricing(
   }
 
   // Find latest pricing where effectiveFrom <= referenceTime
-  const active = matching.find((p) => p.effectiveFrom <= referenceTime);
-  return active ?? matching[matching.length - 1];
+  const active = matching.find((p) => Date.parse(p.effectiveFrom) <= refMs);
+  // Do NOT fall back to a future-dated price if none is active at referenceTime
+  return active ?? null;
 }
 
 interface PhaseComputation {
@@ -46,6 +53,7 @@ interface PhaseComputation {
   tokensByModel: Record<string, TokenBreakdown>;
   costByModel: Record<string, CostRange>;
   explainTree: ExplainNode;
+  explainTreesByModel: Record<string, ExplainNode>;
 }
 
 function computePhase(
@@ -78,6 +86,7 @@ function computePhase(
 
   const tokensByModel: Record<string, TokenBreakdown> = {};
   const costByModel: Record<string, CostRange> = {};
+  const explainTreesByModel: Record<string, ExplainNode> = {};
 
   let primaryExplainTree: ExplainNode | null = null;
 
@@ -85,21 +94,35 @@ function computePhase(
     const pricing = findActivePricing(model.id, catalogPricing, referenceTime);
     const inputPrice = pricing?.inputPerMTok ?? 0;
     const outputPrice = pricing?.outputPerMTok ?? 0;
-    const cachedPrice = pricing?.cachedInputPerMTok ?? inputPrice;
+
+    // H1 & H2: cacheablePrefix is numeric fraction (0 to 1); caching requires cachedInputPerMTok in pricing
+    const cacheFraction =
+      typeof phase.cacheablePrefix === "number" && phase.cacheablePrefix > 0
+        ? Math.min(1, Math.max(0, phase.cacheablePrefix))
+        : 0;
+
+    const hasCachedPricing =
+      pricing !== null &&
+      pricing.cachedInputPerMTok !== undefined &&
+      pricing.cachedInputPerMTok !== null;
+
+    const canCache = Boolean(model.supportsCaching && cacheFraction > 0 && hasCachedPricing);
+    const cachedPrice = canCache ? (pricing!.cachedInputPerMTok as number) : inputPrice;
 
     // Expected tokens per call breakdown
     const tpcExp = params.tokensPerCall.expected;
     const rawInputExp = Math.round(tpcExp * ratioInput);
     const rawOutputExp = tpcExp - rawInputExp;
 
-    const canCache = Boolean(model.supportsCaching && phase.cacheablePrefix);
-    const cachedInputExp = canCache ? Math.round(rawInputExp * 0.5) : 0;
+    const cachedInputExp = canCache ? Math.round(rawInputExp * cacheFraction) : 0;
     const regularInputExp = rawInputExp - cachedInputExp;
 
     // Total phase tokens
     const totalInputTokens = Math.round(regularInputExp * volumeExpected);
     const totalCachedTokens =
-      cachedInputExp > 0 ? Math.round(cachedInputExp * volumeExpected) : undefined;
+      canCache && cachedInputExp > 0
+        ? Math.round(cachedInputExp * volumeExpected)
+        : undefined;
     const totalOutputTokens = Math.round(rawOutputExp * volumeExpected);
     const totalPhaseTokens =
       totalInputTokens + (totalCachedTokens ?? 0) + totalOutputTokens;
@@ -132,11 +155,11 @@ function computePhase(
 
       const rawIn = Math.round(tpc * ratioInput);
       const rawOut = tpc - rawIn;
-      const cachedIn = canCache ? Math.round(rawIn * 0.5) : 0;
+      const cachedIn = canCache ? Math.round(rawIn * cacheFraction) : 0;
       const regIn = rawIn - cachedIn;
 
       const costIn = (regIn * vol * inputPrice) / 1_000_000;
-      const costCached = (cachedIn * vol * cachedPrice) / 1_000_000;
+      const costCached = canCache ? (cachedIn * vol * cachedPrice) / 1_000_000 : 0;
       const costOut = (rawOut * vol * outputPrice) / 1_000_000;
 
       return round4(costIn + costCached + costOut);
@@ -169,65 +192,68 @@ function computePhase(
       pricingVerifiedAt: pricing?.verifiedAt,
     };
 
-    if (!primaryExplainTree) {
-      primaryExplainTree = {
-        label: `Phase Cost: ${phase.name}`,
-        formula: "(regularInputCost + cachedInputCost + outputCost)",
-        inputs: {
-          model: model.label,
-          track: phase.track,
-          callsExpected: params.calls.expected,
-          tokensPerCallExpected: tpcExp,
-          retriesExpected: params.retries.expected,
-          volumeExpected,
-          inputPerMTok: inputPrice,
-          outputPerMTok: outputPrice,
+    // H5: Build strictly additive Explain tree where children add up to total phase cost
+    const regularCost = round4((totalInputTokens * inputPrice) / 1_000_000);
+    const cachedCost = canCache && totalCachedTokens
+      ? round4((totalCachedTokens * cachedPrice) / 1_000_000)
+      : 0;
+    const outputCost = round4((totalOutputTokens * outputPrice) / 1_000_000);
+
+    const modelExplainTree: ExplainNode = {
+      label: `Phase Cost: ${phase.name} (${model.label})`,
+      formula: canCache && totalCachedTokens
+        ? "regularInputCost + cachedInputCost + outputCost"
+        : "regularInputCost + outputCost",
+      inputs: {
+        model: model.label,
+        track: phase.track,
+        callsExpected: params.calls.expected,
+        tokensPerCallExpected: tpcExp,
+        retriesExpected: params.retries.expected,
+        volumeExpected,
+        inputPerMTok: inputPrice,
+        outputPerMTok: outputPrice,
+        ...(canCache ? { cachedInputPerMTok: cachedPrice } : {}),
+      },
+      result: expCost,
+      children: [
+        {
+          label: "Regular Input Cost",
+          formula: "(regularInputTokens * inputPrice) / 1000000",
+          inputs: {
+            regularInputTokens: totalInputTokens,
+            inputPrice,
+          },
+          result: regularCost,
         },
-        result: expCost,
-        children: [
-          {
-            label: "Call Volume",
-            formula:
-              phase.track === "build"
-                ? "calls * (1 + retries) * iterations"
-                : "calls * (1 + retries) * volumeMultiplier * requestsPerDay * monthlyDays",
-            inputs:
-              phase.track === "build"
-                ? {
-                    calls: params.calls.expected,
-                    retries: params.retries.expected,
-                    iterations,
-                  }
-                : {
-                    calls: params.calls.expected,
-                    retries: params.retries.expected,
-                    volumeMultiplier: params.volumeMultiplier.expected,
-                    requestsPerDay,
-                    monthlyDays,
-                  },
-            result: volumeExpected,
+        ...(canCache && totalCachedTokens
+          ? [
+              {
+                label: "Cached Input Cost",
+                formula: "(cachedInputTokens * cachedPrice) / 1000000",
+                inputs: {
+                  cachedInputTokens: totalCachedTokens,
+                  cachedPrice,
+                },
+                result: cachedCost,
+              },
+            ]
+          : []),
+        {
+          label: "Output Cost",
+          formula: "(outputTokens * outputPrice) / 1000000",
+          inputs: {
+            outputTokens: totalOutputTokens,
+            outputPrice,
           },
-          {
-            label: "Tokens Per Call Breakdown",
-            formula: "regularInput + cachedInput + output",
-            inputs: {
-              regularInput: regularInputExp,
-              cachedInput: cachedInputExp,
-              output: rawOutputExp,
-            },
-            result: tpcExp,
-          },
-          {
-            label: "Total Expected Phase Tokens",
-            formula: "volumeExpected * tokensPerCallExpected",
-            inputs: {
-              volumeExpected,
-              tokensPerCallExpected: tpcExp,
-            },
-            result: totalPhaseTokens,
-          },
-        ],
-      };
+          result: outputCost,
+        },
+      ],
+    };
+
+    explainTreesByModel[model.id] = modelExplainTree;
+    if (!primaryExplainTree) {
+      primaryExplainTree = modelExplainTree;
     }
   }
 
@@ -244,6 +270,7 @@ function computePhase(
     tokensByModel,
     costByModel,
     explainTree,
+    explainTreesByModel,
   };
 }
 
@@ -260,20 +287,25 @@ function computePhase(
  */
 export function estimate(
   profile: ProjectProfile,
-  catalog: Pick<CatalogSnapshot, "phases" | "models" | "pricing" | "publishedAt">,
+  catalog: Pick<CatalogSnapshot, "phases" | "models" | "pricing" | "publishedAt"> & {
+    version?: number;
+  },
   overrides?: PhaseOverride[]
 ): EstimationResult {
   const resolvedPhases = PhaseResolver.resolve(profile.phases, catalog.phases);
-
-  const activeModels = (catalog.models as Model[]).filter(
-    (m: Model) => m.status === "active"
-  );
 
   const referenceTime =
     catalog.publishedAt ??
     profile.finalizedAt ??
     profile.createdAt ??
     "2026-10-09T00:00:00.000Z";
+
+  // H9 & H2: Active models with verified active pricing; exclude unpriced models
+  const activeModels = (catalog.models as Model[]).filter((m: Model) => {
+    if (m.status !== "active") return false;
+    const pricing = findActivePricing(m.id, catalog.pricing, referenceTime);
+    return pricing !== null;
+  });
 
   const overrideMap = new Map<string, PhaseOverride>();
   if (Array.isArray(overrides)) {
@@ -298,10 +330,13 @@ export function estimate(
     const phaseResult: PhaseResult = {
       phaseId: resolved.id,
       phaseName: resolved.name,
+      phaseTypeId: resolved.phaseTypeId ?? resolved.id,
+      description: resolved.description,
       params: comp.params as unknown as Record<string, unknown>,
       tokensByModel: comp.tokensByModel,
       costByModel: comp.costByModel,
       explainTree: comp.explainTree,
+      explainTreesByModel: comp.explainTreesByModel,
     };
 
     if (resolved.track === "build") {
@@ -365,6 +400,51 @@ export function estimate(
     : 0;
   const totalExpectedCost = round4(primaryBuild + primaryRuntime);
 
+  // H4: Scale metrics computed inside engine with Explain nodes
+  const requestsPerDay = profile.scale?.requestsPerDay ?? 1;
+  const monthlyDays = profile.scale?.monthlyDays ?? 22;
+  const usersPerDay = profile.scale?.usersPerDay;
+  const monthlyRequests = requestsPerDay * monthlyDays;
+  const costPerRequest =
+    monthlyRequests > 0 ? round4(primaryRuntime / monthlyRequests) : 0;
+  const costPerUserDay = usersPerDay
+    ? round4(primaryRuntime / (usersPerDay * monthlyDays))
+    : round4(primaryRuntime / monthlyDays);
+
+  const scaleMetrics = {
+    requestsPerDay,
+    monthlyDays,
+    usersPerDay,
+    costPerRequest,
+    costPerUserDay,
+    monthlyCost: primaryRuntime,
+    explainTrees: {
+      perRequest: {
+        label: "Cost Per Request",
+        formula: "monthlyRuntimeCost / (requestsPerDay * monthlyDays)",
+        inputs: {
+          monthlyRuntimeCost: primaryRuntime,
+          requestsPerDay,
+          monthlyDays,
+          monthlyRequests,
+        },
+        result: costPerRequest,
+      },
+      perUserDay: {
+        label: "Cost Per User Day",
+        formula: usersPerDay
+          ? "monthlyRuntimeCost / (usersPerDay * monthlyDays)"
+          : "monthlyRuntimeCost / monthlyDays",
+        inputs: {
+          monthlyRuntimeCost: primaryRuntime,
+          ...(usersPerDay ? { usersPerDay } : {}),
+          monthlyDays,
+        },
+        result: costPerUserDay,
+      },
+    },
+  };
+
   // Deterministic generatedAt timestamp for byte-identical determinism
   const generatedAt =
     catalog.publishedAt ??
@@ -372,11 +452,15 @@ export function estimate(
     profile.createdAt ??
     "2026-10-09T00:00:00.000Z";
 
+  const catalogVersion = (catalog as { version?: number }).version ?? 1;
+
   return {
     profileVersion: profile.profileVersion,
+    catalogVersion,
     currency: "USD",
     build: buildTrack,
     runtime: runtimeTrack,
+    scaleMetrics,
     totalExpectedCost,
     generatedAt,
   };

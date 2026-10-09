@@ -25,6 +25,7 @@ import type {
   Model,
   SavingsRange,
   Phase as CatalogPhase,
+  Pricing,
 } from "@token-optimizer/core";
 
 type TabId = "enhance" | "estimate" | "optimize" | "implement" | "settings";
@@ -45,6 +46,7 @@ export const App: React.FC = () => {
   const [catalogPublishedAt, setCatalogPublishedAt] = useState<string | null>(null);
   const [platform, setPlatform] = useState("vscode");
   const [catalogPhases, setCatalogPhases] = useState<CatalogPhase[]>([]);
+  const [pricing, setPricing] = useState<Pricing[]>([]);
 
   // Enhance state
   const [profile, setProfile] = useState<ProjectProfile | null>(initialSavedState.profile || null);
@@ -110,6 +112,22 @@ export const App: React.FC = () => {
     });
   }, []);
 
+  // H11: Auto-trigger estimation when switching to estimate tab with finalized profile
+  useEffect(() => {
+    if (activeTab === "estimate" && profile?.finalizedAt) {
+      if (!estimation || estimation.profileVersion !== profile.profileVersion) {
+        setIsEstimating(true);
+        vscodeBridge.postMessage({
+          version: 1,
+          type: "estimate/request",
+          payload: {
+            profileVersion: profile.profileVersion,
+          },
+        });
+      }
+    }
+  }, [activeTab, profile?.finalizedAt, profile?.profileVersion, estimation]);
+
   useEffect(() => {
     const unsubscribe = vscodeBridge.onMessage((msg: HostToWebviewMsg) => {
       switch (msg.type) {
@@ -117,6 +135,7 @@ export const App: React.FC = () => {
           setStrategies(msg.payload.strategies);
           setProviders(msg.payload.providers);
           setModels(msg.payload.models);
+          setPricing(msg.payload.pricing || []);
           setCatalogPhases(msg.payload.phases || []);
           setIsOffline(msg.payload.isOffline);
           if (msg.payload.publishedAt) {
@@ -226,6 +245,11 @@ export const App: React.FC = () => {
         case "estimate/result":
           setIsEstimating(false);
           setEstimation(msg.payload.result);
+          break;
+
+        case "estimate/error":
+          setIsEstimating(false);
+          setErrorBanner(`Estimation error: ${msg.payload.message}`);
           break;
 
         case "strategy/selection":
@@ -365,6 +389,7 @@ export const App: React.FC = () => {
             profile={profile}
             catalogPhases={catalogPhases}
             models={models}
+            pricing={pricing}
           />
         )}
 

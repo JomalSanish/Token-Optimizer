@@ -19,5 +19,7 @@ export * from "./estimation/TokenizerLayer.js";
 export * from "./estimation/ParamResolver.js";
 export * from "./estimation/EstimationEngine.js";
 export * from "./strategies/SavingsAggregator.js";
+export * from "./setup/UserSetupStore.js";
 
 export const CORE_VERSION = "0.1.0";
+

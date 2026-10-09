@@ -26,9 +26,9 @@ export async function up(db: Db): Promise<void> {
     const track: "build" | "runtime" = doc.track || (isBuildPhase ? "build" : "runtime");
 
     const defaultParams = doc.defaultParams || {
-      callsLow: track === "build" ? 1 : 100,
-      callsExpected: track === "build" ? 5 : 500,
-      callsHigh: track === "build" ? 20 : 2000,
+      callsLow: track === "build" ? 1 : 1,
+      callsExpected: track === "build" ? 5 : 1,
+      callsHigh: track === "build" ? 20 : 3,
       tokensPerCallLow: 500,
       tokensPerCallExpected: 2000,
       tokensPerCallHigh: 6000,
@@ -47,9 +47,13 @@ export async function up(db: Db): Promise<void> {
     };
 
     const cacheablePrefix =
-      typeof doc.cacheablePrefix === "boolean"
+      typeof doc.cacheablePrefix === "number"
         ? doc.cacheablePrefix
-        : Boolean(doc.default_cacheable_fraction && doc.default_cacheable_fraction > 0);
+        : typeof doc.cacheablePrefix === "boolean"
+        ? (doc.cacheablePrefix ? 0.5 : 0)
+        : typeof doc.default_cacheable_fraction === "number"
+        ? doc.default_cacheable_fraction
+        : 0;
 
     const archetypes = doc.archetypes || [
       "rag-chatbot",

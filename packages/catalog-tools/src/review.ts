@@ -174,7 +174,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   client
     .connect()
     .then(async () => {
-      const db = client.db();
+      const db = client.db(process.env.MONGODB_DB || "token_optimizer");
 
       if (isReport) {
         console.log("Generating strategy review report...");

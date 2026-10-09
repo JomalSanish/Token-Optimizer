@@ -22,16 +22,17 @@ async function build() {
   console.log("[build] Extension bundled to dist/extension.js");
 
   // Copy webview/dist assets into dist/webview
-  if (fs.existsSync(webviewDistDir)) {
-    console.log(`[build] Copying webview assets from ${webviewDistDir} to ${targetWebviewDir}...`);
-    fs.mkdirSync(targetWebviewDir, { recursive: true });
-    fs.cpSync(webviewDistDir, targetWebviewDir, { recursive: true });
-    console.log("[build] Webview assets copied successfully.");
-  } else {
-    console.warn(
-      `[build] Warning: webview dist not found at ${webviewDistDir}. Build webview before packaging.`
+  const webviewIndexHtml = path.join(webviewDistDir, "index.html");
+  if (!fs.existsSync(webviewDistDir) || !fs.existsSync(webviewIndexHtml)) {
+    throw new Error(
+      `[build] Fatal: webview dist or index.html not found at ${webviewDistDir}. Ensure @token-optimizer/webview is built first.`
     );
   }
+
+  console.log(`[build] Copying webview assets from ${webviewDistDir} to ${targetWebviewDir}...`);
+  fs.mkdirSync(targetWebviewDir, { recursive: true });
+  fs.cpSync(webviewDistDir, targetWebviewDir, { recursive: true });
+  console.log("[build] Webview assets copied successfully.");
 
   // Ensure LICENSE is present in packages/extension
   const rootLicense = path.resolve(extensionDir, "..", "..", "LICENSE");

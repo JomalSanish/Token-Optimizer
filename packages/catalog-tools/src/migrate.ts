@@ -117,7 +117,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     client
       .connect()
       .then(async () => {
-        const db = client.db();
+        const db = client.db(process.env.MONGODB_DB || "token_optimizer");
         console.log(`Connected to MongoDB. Running migrations from step ${from}...`);
         const executed = await runMigrations(db, { from, dryRun: false });
         console.log(`Successfully completed ${executed.length} migration(s).`);

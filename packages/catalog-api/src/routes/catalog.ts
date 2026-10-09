@@ -28,9 +28,46 @@ const ALLOWED_COLLECTIONS = [
   "promptTemplates",
 ];
 
-const stripId = <T extends Record<string, unknown>>(doc: T): Omit<T, "_id"> => {
-  const { _id, ...rest } = doc;
-  return rest;
+const sanitizeDocument = (
+  doc: Record<string, unknown>,
+  collection?: string
+): Record<string, unknown> => {
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(doc)) {
+    if (key.startsWith("_")) continue;
+    if (val === null || val === undefined) continue;
+
+    if (collection === "providers") {
+      if (key === "provider_id" || key === "display_name" || key === "active") continue;
+    } else if (collection === "models") {
+      if (
+        key === "model_id" ||
+        key === "provider" ||
+        key === "display_name" ||
+        key === "context_window" ||
+        key === "complexity_tier" ||
+        key === "pricing" ||
+        key === "created_at"
+      ) {
+        continue;
+      }
+    } else if (collection === "phases") {
+      if (
+        key === "phase_id" ||
+        key === "sort_order" ||
+        key === "default_cacheable_fraction"
+      ) {
+        continue;
+      }
+    }
+
+    if (val && typeof val === "object" && !Array.isArray(val) && !(val instanceof Date)) {
+      result[key] = sanitizeDocument(val as Record<string, unknown>);
+    } else {
+      result[key] = val;
+    }
+  }
+  return result;
 };
 
 export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (
@@ -49,7 +86,8 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (
       const metaDoc = await db.collection("catalog_meta").findOne({});
       const version = metaDoc?.version ?? 1;
       const schemaVersion = metaDoc?.schemaVersion ?? "1.0";
-      const publishedAt = metaDoc?.publishedAt ?? new Date().toISOString();
+      // S1-1: Use deterministic fallback date when catalog_meta is absent so ETag remains stable
+      const publishedAt = metaDoc?.publishedAt ?? "2025-01-01T00:00:00.000Z";
 
       const etag = generateETag(version, publishedAt);
       const ifNoneMatch = request.headers["if-none-match"];
@@ -61,20 +99,31 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (
         return reply.status(304).send();
       }
 
-      const providers = (await db.collection("providers").find({}).toArray()).map(stripId);
-      const models = (await db.collection("models").find({}).toArray()).map(stripId);
-      const pricing = (await db.collection("pricing").find({}).toArray()).map(stripId);
-      const phases = (await db.collection("phases").find({}).toArray()).map(stripId);
+      // C3: Strip deprecated legacy fields before validating against strict schemas
+      const providers = (await db.collection("providers").find({}).toArray()).map((d) =>
+        sanitizeDocument(d, "providers")
+      );
+      const models = (await db.collection("models").find({}).toArray()).map((d) =>
+        sanitizeDocument(d, "models")
+      );
+      const pricing = (await db.collection("pricing").find({}).toArray()).map((d) =>
+        sanitizeDocument(d, "pricing")
+      );
+      const phases = (await db.collection("phases").find({}).toArray()).map((d) =>
+        sanitizeDocument(d, "phases")
+      );
 
       // Principle VIII: Only return approved strategies
       const strategies = (
         await db.collection("strategies").find({ reviewStatus: "approved" }).toArray()
-      ).map(stripId);
+      ).map((d) => sanitizeDocument(d, "strategies"));
 
-      const platforms = (await db.collection("platforms").find({}).toArray()).map(stripId);
+      const platforms = (await db.collection("platforms").find({}).toArray()).map((d) =>
+        sanitizeDocument(d, "platforms")
+      );
       const promptTemplates = (
         await db.collection("prompt_templates").find({}).toArray()
-      ).map(stripId);
+      ).map((d) => sanitizeDocument(d, "prompt_templates"));
 
       const rawSnapshot: CatalogSnapshot = {
         version,
@@ -118,7 +167,7 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (
       try {
         const metaDoc = await db.collection("catalog_meta").findOne({});
         const version = metaDoc?.version ?? 1;
-        const publishedAt = metaDoc?.publishedAt ?? new Date().toISOString();
+        const publishedAt = metaDoc?.publishedAt ?? "2025-01-01T00:00:00.000Z";
 
         const etag = generateETag(version, `${collection}:${publishedAt}`);
         const ifNoneMatch = request.headers["if-none-match"];
@@ -134,7 +183,7 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (
         const filter = collection === "strategies" ? { reviewStatus: "approved" } : {};
 
         const rawDocs = await db.collection(mongoColName).find(filter).toArray();
-        const items = rawDocs.map(stripId);
+        const items = rawDocs.map((d) => sanitizeDocument(d, collection));
 
         // Validate items with corresponding Zod schemas
         if (collection === "providers") {

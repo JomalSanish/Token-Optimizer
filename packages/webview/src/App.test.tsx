@@ -122,4 +122,114 @@ describe("Webview Shell (T004, T015, Finding 4, Principle I & II)", () => {
     // App continues to render normally
     expect(screen.getByText("Token Optimizer")).toBeDefined();
   });
+
+  it("receives catalog/updated and estimate/result, and passes pricing down to EstimateView so models display non-zero rates (C2)", async () => {
+    render(<App />);
+
+    // Send catalog/updated with pricing
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: {
+            version: 1,
+            type: "catalog/updated",
+            payload: {
+              version: 1,
+              schemaVersion: "1.0.0",
+              isOffline: false,
+              publishedAt: "2026-01-01T00:00:00.000Z",
+              strategies: [],
+              providers: [],
+              platforms: [],
+              promptTemplates: [],
+              models: [
+                {
+                  id: "claude-3-5-sonnet",
+                  providerId: "anthropic",
+                  label: "Claude 3.5 Sonnet",
+                  contextWindow: 200000,
+                  maxOutput: 8192,
+                  tier: "frontier",
+                  supportsCaching: true,
+                  supportsBatch: false,
+                  supportsStructuredOutput: true,
+                  tokenizer: { kind: "tiktoken" },
+                  status: "active",
+                  addedAt: "2026-01-01T00:00:00.000Z",
+                },
+              ],
+              phases: [],
+              pricing: [
+                {
+                  modelId: "claude-3-5-sonnet",
+                  currency: "USD",
+                  inputPerMTok: 3.0,
+                  outputPerMTok: 15.0,
+                  cachedInputPerMTok: 0.3,
+                  effectiveFrom: "2026-01-01T00:00:00.000Z",
+                  sourceUrl: "https://mock.webview.test/pricing",
+                  verifiedAt: "2026-10-09T00:00:00.000Z",
+                },
+              ],
+            },
+          },
+        })
+      );
+    });
+
+    // Send estimate/result
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: {
+            version: 1,
+            type: "estimate/result",
+            payload: {
+              result: {
+                profileVersion: 1,
+                currency: "USD",
+                build: {
+                  phases: [],
+                  totalByModel: {
+                    "claude-3-5-sonnet": {
+                      low: 0.1,
+                      expected: 1.0,
+                      high: 5.0,
+                      currency: "USD",
+                      pricingVerifiedAt: "2026-10-09T00:00:00.000Z",
+                    },
+                  },
+                },
+                runtime: {
+                  phases: [],
+                  totalByModel: {
+                    "claude-3-5-sonnet": {
+                      low: 5.0,
+                      expected: 50.0,
+                      high: 200.0,
+                      currency: "USD",
+                      pricingVerifiedAt: "2026-10-09T00:00:00.000Z",
+                    },
+                  },
+                },
+                totalExpectedCost: 51.0,
+                generatedAt: "2026-10-09T00:00:00.000Z",
+              },
+            },
+          },
+        })
+      );
+    });
+
+    // Switch to Estimate tab
+    fireEvent.click(screen.getByRole("button", { name: /Estimate/ }));
+
+    // Verify non-zero pricing rates and cached rate are rendered in the model comparison table
+    expect(screen.getByText("Claude 3.5 Sonnet")).toBeDefined();
+    expect(screen.getByText("$3.00")).toBeDefined();
+    expect(screen.getByText("$15.00")).toBeDefined();
+    expect(screen.getByText("$0.300/M")).toBeDefined();
+    expect(screen.queryByText("no cached pricing data")).toBeNull();
+  });
 });
+

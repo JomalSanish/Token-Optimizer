@@ -64,6 +64,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@token-optimizer/webview": "workspace:*",
     "@types/node": "^20.17.6",
     "@types/vscode": "^1.90.0",
     "esbuild": "^0.28.2",

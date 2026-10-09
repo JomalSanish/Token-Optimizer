@@ -112,9 +112,10 @@ export class EnhanceService {
 
     let promptText: string;
     if (promptTemplate) {
+      // S3-4: Safe function replacer to prevent interpreting $& or $1 in arbitrary user text
       promptText = promptTemplate.template
-        .replace("{{description}}", description)
-        .replace("{{phasesTaxonomy}}", taxonomyResult.phasesTaxonomyText);
+        .replace(/\{\{description\}\}/g, () => description)
+        .replace(/\{\{phasesTaxonomy\}\}/g, () => taxonomyResult.phasesTaxonomyText);
     } else {
       promptText = `Analyze project architecture and generate token optimization profile.\n\nProject:\n${description}\n\nPhases:\n${taxonomyResult.phasesTaxonomyText}\n\nOutput JSON with "narrative" and "profile" conforming to ProjectProfileSchema.`;
     }
@@ -225,6 +226,9 @@ export class EnhanceService {
     const narrative = extracted.narrative || "Architecture synthesis completed.";
     const profile = validationResult.data;
 
+    // S3-5: LLM output must not be trusted for confirmation or finalization (FR-052, Principle X)
+    delete (profile as { finalizedAt?: string }).finalizedAt;
+
     // Validate phases against catalog taxonomy (T133, T147, FR-052)
     const validPhaseTypeIds = new Set(catalogPhases.map((p) => p.id));
     let usablePhases = Array.isArray(profile.phases) && profile.phases.length > 0;
@@ -242,17 +246,22 @@ export class EnhanceService {
       profile.phases = suggestPhases(profile, catalogPhases);
     }
 
+    // S3-5: All phases from LLM generation start unconfirmed, requiring explicit user review
+    for (const phase of profile.phases) {
+      phase.confirmed = false;
+    }
+
     // Stream narrative preview deltas
-    // If taxonomy budget degradation occurred, note it in the narrative stream so it is explainable
-    let streamNarrative = narrative;
+    // S3-2: If taxonomy budget degradation occurred, include note in both stream and saved narrative
+    let finalNarrative = narrative;
     if (taxonomyResult.level !== "full") {
       const budgetNote = `[Taxonomy budget level: ${taxonomyResult.level} - prompt compacted to fit context budget]\n\n`;
-      streamNarrative = budgetNote + narrative;
+      finalNarrative = budgetNote + narrative;
     }
 
     const chunkSize = 40;
-    for (let i = 0; i < streamNarrative.length; i += chunkSize) {
-      const delta = streamNarrative.slice(i, i + chunkSize);
+    for (let i = 0; i < finalNarrative.length; i += chunkSize) {
+      const delta = finalNarrative.slice(i, i + chunkSize);
       await this.postMessage({
         version: 1,
         type: "enhance/stream",
@@ -267,16 +276,15 @@ export class EnhanceService {
       costUsd = CostCalculator.computeCostUsd(totalInputTokens, totalOutputTokens, pricing);
     }
 
-    const nextVersion = previousProfileVersion
-      ? previousProfileVersion + 1
-      : this.historyStore.getNextVersion();
+    // S3-1: Always allocate the next sequential version rather than overwriting intermediate versions
+    const nextVersion = this.historyStore.getNextVersion();
 
     profile.profileVersion = nextVersion;
     profile.createdAt = new Date().toISOString();
 
     const entry = await this.historyStore.add({
       version: nextVersion,
-      narrative,
+      narrative: finalNarrative,
       profile,
       createdAt: profile.createdAt,
       costUsd,
@@ -290,7 +298,7 @@ export class EnhanceService {
       version: 1,
       type: "enhance/result",
       payload: {
-        narrative,
+        narrative: finalNarrative,
         profile: entry.profile,
         profileVersion: entry.version,
         inputTokens: totalInputTokens,
