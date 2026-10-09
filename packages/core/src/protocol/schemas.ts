@@ -151,6 +151,7 @@ export const PhaseSchema = z
     track: z.enum(["build", "runtime"]),
     sortOrder: z.number().int().nonnegative(),
     description: z.string().max(1000),
+    shortDescription: z.string().max(300).optional(),
     archetypes: z.array(z.string().max(100)),
     defaultParams: z
       .object({
@@ -488,6 +489,7 @@ export const EnhanceResultMsgSchema = createEnvelope(
       inputTokens: z.number().int().nonnegative(),
       outputTokens: z.number().int().nonnegative(),
       costUsd: z.number().nonnegative(),
+      taxonomyBudgetLevel: z.enum(["full", "short", "compact"]).optional(),
     })
     .strict()
 );
@@ -528,6 +530,73 @@ export const PhasesUpdatedMsgSchema = createEnvelope(
       ),
     })
     .strict()
+);
+
+export const ProfileHistorySummarySchema = z
+  .object({
+    version: z.number().int().positive(),
+    createdAt: z.string(),
+    finalizedAt: z.string().optional(),
+    phaseCount: z.number().int().nonnegative(),
+    costUsd: z.number().nonnegative().optional(),
+  })
+  .strict();
+
+export const EnhanceGetHistoryMsgSchema = createEnvelope(
+  "enhance/getHistory",
+  z.object({}).strict()
+);
+
+export const EnhanceGetVersionMsgSchema = createEnvelope(
+  "enhance/getVersion",
+  z
+    .object({
+      version: z.number().int().positive(),
+    })
+    .strict()
+);
+
+export const EnhanceClearHistoryMsgSchema = createEnvelope(
+  "enhance/clearHistory",
+  z.object({}).strict()
+);
+
+export const EnhanceHistoryLoadedMsgSchema = createEnvelope(
+  "enhance/historyLoaded",
+  z
+    .object({
+      summaries: z.array(ProfileHistorySummarySchema),
+    })
+    .strict()
+);
+
+export const EnhanceVersionLoadedMsgSchema = createEnvelope(
+  "enhance/versionLoaded",
+  z
+    .object({
+      entry: z
+        .object({
+          version: z.number().int().positive(),
+          narrative: z.string(),
+          profile: ProjectProfileSchema,
+          createdAt: z.string(),
+          finalizedAt: z.string().optional(),
+          costUsd: z.number().nonnegative().optional(),
+          tokens: z
+            .object({
+              inputTokens: z.number().int().nonnegative(),
+              outputTokens: z.number().int().nonnegative(),
+            })
+            .optional(),
+        })
+        .strict(),
+    })
+    .strict()
+);
+
+export const EnhanceHistoryClearedMsgSchema = createEnvelope(
+  "enhance/historyCleared",
+  z.object({}).strict()
 );
 
 export const EstimateResultMsgSchema = createEnvelope(
@@ -713,6 +782,9 @@ export const HostToWebviewMsgSchema = z.discriminatedUnion("type", [
   EnhanceErrorMsgSchema,
   ProfileFinalizedMsgSchema,
   PhasesUpdatedMsgSchema,
+  EnhanceHistoryLoadedMsgSchema,
+  EnhanceVersionLoadedMsgSchema,
+  EnhanceHistoryClearedMsgSchema,
   EstimateResultMsgSchema,
   StrategySelectionMsgSchema,
   SavingsUpdateMsgSchema,
@@ -916,6 +988,9 @@ export const WebviewToHostMsgSchema = z.discriminatedUnion("type", [
   SetCopilotOnlyMsgSchema,
   EnhanceRunMsgSchema,
   FinalizeProfileMsgSchema,
+  EnhanceGetHistoryMsgSchema,
+  EnhanceGetVersionMsgSchema,
+  EnhanceClearHistoryMsgSchema,
   EditPhasesMsgSchema,
   EstimateRequestMsgSchema,
   StrategySetMsgSchema,

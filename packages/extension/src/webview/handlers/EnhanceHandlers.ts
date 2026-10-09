@@ -120,6 +120,7 @@ export class EnhanceHandlers {
             profileVersion,
           },
         });
+        await this.sendHistory();
       }
     });
 
@@ -165,7 +166,62 @@ export class EnhanceHandlers {
             problems,
           },
         });
+        await this.sendHistory();
       }
+    });
+
+    // 4. On webview/ready handshake, send initial history summaries
+    this.router.register("webview/ready", async () => {
+      await this.sendHistory();
+    });
+
+    // 5. enhance/getHistory
+    this.router.register("enhance/getHistory", async () => {
+      await this.sendHistory();
+    });
+
+    // 6. enhance/getVersion - fetch full profile on demand
+    this.router.register("enhance/getVersion", async (msg) => {
+      const { version } = msg.payload;
+      const entry = this.historyStore.getVersion(version);
+      if (entry) {
+        await this.postToWebview({
+          version: 1,
+          type: "enhance/versionLoaded",
+          payload: {
+            entry,
+          },
+        });
+      } else {
+        await this.postToWebview({
+          version: 1,
+          type: "enhance/error",
+          payload: {
+            error: "schema-invalid",
+            message: `Profile version ${version} not found in history store.`,
+          },
+        });
+      }
+    });
+
+    // 7. enhance/clearHistory
+    this.router.register("enhance/clearHistory", async () => {
+      await this.historyStore.clear();
+      await this.postToWebview({
+        version: 1,
+        type: "enhance/historyCleared",
+        payload: {},
+      });
+    });
+  }
+
+  public async sendHistory(): Promise<void> {
+    await this.postToWebview({
+      version: 1,
+      type: "enhance/historyLoaded",
+      payload: {
+        summaries: this.historyStore.getSummaries(),
+      },
     });
   }
 

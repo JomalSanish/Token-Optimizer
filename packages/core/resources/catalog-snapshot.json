@@ -161,6 +161,7 @@
       "track": "build",
       "sortOrder": 1,
       "description": "Initial system architectural scoping, schema design, and scaffolding prompts.",
+      "shortDescription": "Scoping, schema design, and scaffolding prompts.",
       "archetypes": [
         "rag-chatbot",
         "coding-agent",
@@ -185,6 +186,7 @@
       "track": "build",
       "sortOrder": 2,
       "description": "Iterative agentic code generation and unit testing cycles.",
+      "shortDescription": "Iterative code generation and unit testing.",
       "archetypes": [
         "rag-chatbot",
         "coding-agent",
@@ -209,6 +211,7 @@
       "track": "runtime",
       "sortOrder": 3,
       "description": "User queries processed by runtime RAG and generation pipelines.",
+      "shortDescription": "Runtime RAG and query answering pipelines.",
       "archetypes": [
         "rag-chatbot",
         "general"

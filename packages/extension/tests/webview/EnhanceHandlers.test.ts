@@ -330,4 +330,114 @@ describe("EnhanceHandlers Unit Tests (T061, T148, FR-015, FR-052)", () => {
     expect(v2).toBeDefined();
     expect(v2?.profile.phases).toHaveLength(2);
   });
+
+  it("sends history summaries on webview/ready handshake and on enhance/getHistory", async () => {
+    await historyStore.add({
+      version: 1,
+      narrative: "Initial version",
+      profile: createProfileWithPhases([
+        {
+          id: "p1",
+          phaseTypeId: "architecture",
+          track: "build",
+          name: "Architecture",
+          source: "llm",
+          confirmed: true,
+        },
+      ]),
+      createdAt: new Date().toISOString(),
+      costUsd: 0.015,
+    });
+
+    // 1. webview/ready handshake
+    await router.handleInbound({
+      version: 1,
+      type: "webview/ready",
+      payload: {},
+    });
+
+    const readyHistoryMsg = postedMessages.find((m) => m.type === "enhance/historyLoaded");
+    expect(readyHistoryMsg).toBeDefined();
+    if (readyHistoryMsg && readyHistoryMsg.type === "enhance/historyLoaded") {
+      expect(readyHistoryMsg.payload.summaries).toHaveLength(1);
+      expect(readyHistoryMsg.payload.summaries[0].version).toBe(1);
+      expect(readyHistoryMsg.payload.summaries[0].phaseCount).toBe(1);
+    }
+
+    // 2. Explicit enhance/getHistory
+    postedMessages = [];
+    await router.handleInbound({
+      version: 1,
+      type: "enhance/getHistory",
+      payload: {},
+    });
+
+    const explicitHistoryMsg = postedMessages.find((m) => m.type === "enhance/historyLoaded");
+    expect(explicitHistoryMsg).toBeDefined();
+    if (explicitHistoryMsg && explicitHistoryMsg.type === "enhance/historyLoaded") {
+      expect(explicitHistoryMsg.payload.summaries).toHaveLength(1);
+    }
+  });
+
+  it("fetches full profile on enhance/getVersion and returns enhance/versionLoaded", async () => {
+    await historyStore.add({
+      version: 1,
+      narrative: "Initial architectural synthesis.",
+      profile: createProfileWithPhases([
+        {
+          id: "p1",
+          phaseTypeId: "architecture",
+          track: "build",
+          name: "Architecture",
+          source: "llm",
+          confirmed: true,
+        },
+      ]),
+      createdAt: new Date().toISOString(),
+    });
+
+    await router.handleInbound({
+      version: 1,
+      type: "enhance/getVersion",
+      payload: { version: 1 },
+    });
+
+    const versionMsg = postedMessages.find((m) => m.type === "enhance/versionLoaded");
+    expect(versionMsg).toBeDefined();
+    if (versionMsg && versionMsg.type === "enhance/versionLoaded") {
+      expect(versionMsg.payload.entry.version).toBe(1);
+      expect(versionMsg.payload.entry.narrative).toBe("Initial architectural synthesis.");
+      expect(versionMsg.payload.entry.profile.phases).toHaveLength(1);
+    }
+  });
+
+  it("clears stored profile history on enhance/clearHistory and sends enhance/historyCleared", async () => {
+    await historyStore.add({
+      version: 1,
+      narrative: "Initial version",
+      profile: createProfileWithPhases([
+        {
+          id: "p1",
+          phaseTypeId: "architecture",
+          track: "build",
+          name: "Architecture",
+          source: "llm",
+          confirmed: true,
+        },
+      ]),
+      createdAt: new Date().toISOString(),
+    });
+
+    expect(historyStore.getAll()).toHaveLength(1);
+
+    await router.handleInbound({
+      version: 1,
+      type: "enhance/clearHistory",
+      payload: {},
+    });
+
+    const clearedMsg = postedMessages.find((m) => m.type === "enhance/historyCleared");
+    expect(clearedMsg).toBeDefined();
+    expect(historyStore.getAll()).toHaveLength(0);
+  });
 });

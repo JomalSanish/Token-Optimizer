@@ -7,6 +7,7 @@ import { AuthHandlers } from "./webview/handlers/AuthHandlers.js";
 import { EnhanceHandlers } from "./webview/handlers/EnhanceHandlers.js";
 import { EnhanceService } from "./enhance/EnhanceService.js";
 import { ProfileHistoryStore } from "./enhance/ProfileHistoryStore.js";
+import { EstimationHandler } from "./estimation/EstimationHandler.js";
 import {
   AnthropicAdapter,
   OpenAIAdapter,
@@ -89,6 +90,15 @@ export function activate(context: vscode.ExtensionContext): void {
     getCatalogSnapshot: () => catalogService.getCatalogSnapshot(),
   });
   enhanceHandlers.register();
+
+  // Initialize estimation handlers (Slice 4, Principle IV, XII, FR-019, SC-003)
+  const estimationHandler = new EstimationHandler({
+    context,
+    router,
+    historyStore,
+    getCatalogSnapshot: () => catalogService.getCatalogSnapshot(),
+  });
+  estimationHandler.register();
 
   // Initialize catalog in background on activation
   catalogService.initialize().catch((err) => {

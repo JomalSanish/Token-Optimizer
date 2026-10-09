@@ -21,6 +21,7 @@ import type {
   ProjectProfile,
   ConfirmedPhase,
   Phase as CatalogPhase,
+  ProfileHistorySummary,
 } from "@token-optimizer/core";
 
 export interface VersionHistoryItem {
@@ -44,6 +45,7 @@ interface EnhanceProps {
   };
   catalogPhases?: CatalogPhase[];
   onProfileSelect?: (profile: ProjectProfile) => void;
+  initialHistorySummaries?: ProfileHistorySummary[];
 }
 
 export const Enhance: React.FC<EnhanceProps> = ({
@@ -54,40 +56,59 @@ export const Enhance: React.FC<EnhanceProps> = ({
   enhanceModel,
   catalogPhases = [],
   onProfileSelect,
+  initialHistorySummaries = [],
 }) => {
   const [description, setDescription] = useState("");
   const [isPreFillLoading, setIsPreFillLoading] = useState(false);
   const [showJsonViewer, setShowJsonViewer] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
 
-  // Version history tracking
-  const [versionHistory, setVersionHistory] = useState<VersionHistoryItem[]>([]);
+  // History hydration and caching (Principle II, XI)
+  const [historySummaries, setHistorySummaries] = useState<ProfileHistorySummary[]>(initialHistorySummaries);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [cachedProfiles, setCachedProfiles] = useState<Record<number, ProjectProfile>>({});
   const [showHistory, setShowHistory] = useState(false);
   const [diffVersionA, setDiffVersionA] = useState<number | null>(null);
   const [diffVersionB, setDiffVersionB] = useState<number | null>(null);
 
-  // Record profile in local version history when profile updates
+  // Cache current active profile
   useEffect(() => {
     if (profile) {
-      setVersionHistory((prev) => {
-        const existingIdx = prev.findIndex((v) => v.version === profile.profileVersion);
-        const item: VersionHistoryItem = {
-          version: profile.profileVersion,
-          profile,
-          narrative: narrative || "",
-          costUsd,
-          createdAt: profile.createdAt,
-          finalizedAt: profile.finalizedAt,
-        };
-        if (existingIdx !== -1) {
-          const updated = [...prev];
-          updated[existingIdx] = item;
-          return updated;
-        }
-        return [...prev, item].sort((a, b) => b.version - a.version);
-      });
+      setCachedProfiles((prev) => ({
+        ...prev,
+        [profile.profileVersion]: profile,
+      }));
     }
-  }, [profile, narrative, costUsd]);
+  }, [profile]);
+
+  // Request history on mount and listen for host history hydration messages
+  useEffect(() => {
+    vscodeBridge.postMessage({
+      version: 1,
+      type: "enhance/getHistory",
+      payload: {},
+    });
+
+    const unsubscribe = vscodeBridge.onMessage((msg) => {
+      if (msg.type === "enhance/historyLoaded") {
+        setHistorySummaries(msg.payload.summaries);
+        setIsHistoryLoading(false);
+      } else if (msg.type === "enhance/versionLoaded") {
+        setCachedProfiles((prev) => ({
+          ...prev,
+          [msg.payload.entry.version]: msg.payload.entry.profile,
+        }));
+      } else if (msg.type === "enhance/historyCleared") {
+        setHistorySummaries([]);
+        setCachedProfiles({});
+        setIsHistoryLoading(false);
+        setDiffVersionA(null);
+        setDiffVersionB(null);
+      }
+    });
+
+    return unsubscribe;
+  }, []);
 
   // Key down handling: Enter creates newline, Ctrl/Cmd+Enter submits (Principle IX, T063)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -203,9 +224,55 @@ export const Enhance: React.FC<EnhanceProps> = ({
   const hasUnconfirmedPhases = profile?.phases.some((p) => !p.confirmed) ?? false;
   const isFinalizeDisabled = hasZeroPhases || hasUnconfirmedPhases || Boolean(profile?.finalizedAt);
 
-  // Compute diff between Version A and Version B
-  const versionA = versionHistory.find((v) => v.version === diffVersionA);
-  const versionB = versionHistory.find((v) => v.version === diffVersionB);
+  // Compute diff between Version A and Version B using cached profiles
+  const versionA = diffVersionA !== null ? cachedProfiles[diffVersionA] : null;
+  const versionB = diffVersionB !== null ? cachedProfiles[diffVersionB] : null;
+
+  const handleRestoreVersion = (version: number) => {
+    const cached = cachedProfiles[version];
+    if (cached) {
+      onProfileSelect?.(cached);
+    }
+    vscodeBridge.postMessage({
+      version: 1,
+      type: "enhance/getVersion",
+      payload: { version },
+    });
+  };
+
+  const handleSelectDiffA = (version: number) => {
+    setDiffVersionA(version);
+    if (!cachedProfiles[version]) {
+      vscodeBridge.postMessage({
+        version: 1,
+        type: "enhance/getVersion",
+        payload: { version },
+      });
+    }
+  };
+
+  const handleSelectDiffB = (version: number) => {
+    setDiffVersionB(version);
+    if (!cachedProfiles[version]) {
+      vscodeBridge.postMessage({
+        version: 1,
+        type: "enhance/getVersion",
+        payload: { version },
+      });
+    }
+  };
+
+  const handleClearHistory = () => {
+    vscodeBridge.postMessage({
+      version: 1,
+      type: "enhance/clearHistory",
+      payload: {},
+    });
+  };
+
+  const handleToggleHistory = () => {
+    setShowHistory(!showHistory);
+  };
 
   return (
     <div className="space-y-6">
@@ -339,11 +406,11 @@ export const Enhance: React.FC<EnhanceProps> = ({
               </button>
 
               <button
-                onClick={() => setShowHistory(!showHistory)}
+                onClick={handleToggleHistory}
                 className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors border border-slate-700"
               >
                 <History className="w-3.5 h-3.5 text-indigo-400" />
-                <span>History ({versionHistory.length})</span>
+                <span>History ({historySummaries.length})</span>
               </button>
 
               {!profile.finalizedAt && (
@@ -521,7 +588,7 @@ export const Enhance: React.FC<EnhanceProps> = ({
         </div>
       )}
 
-      {/* Version History & Two-Version Diff (T063) */}
+      {/* Version History & Two-Version Diff (T063, History Hydration) */}
       {showHistory && (
         <div className="glass-panel rounded-xl p-5 border border-slate-800 bg-slate-900/50 space-y-4">
           <div className="flex items-center justify-between">
@@ -529,94 +596,125 @@ export const Enhance: React.FC<EnhanceProps> = ({
               <GitCompare className="w-4 h-4 text-indigo-400" />
               <h3 className="text-sm font-semibold text-slate-100">Version History & Diff</h3>
             </div>
-            <span className="text-xs text-slate-400">
-              {versionHistory.length} versions recorded
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleClearHistory}
+                disabled={historySummaries.length === 0 || isHistoryLoading}
+                className="px-2.5 py-1 bg-rose-950/40 hover:bg-rose-900/40 border border-rose-800/40 disabled:opacity-40 disabled:cursor-not-allowed text-rose-300 rounded text-xs font-medium flex items-center gap-1 transition-colors"
+                title="Clear all stored profile history"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Clear History</span>
+              </button>
+              <span className="text-xs text-slate-400">
+                {historySummaries.length} versions recorded
+              </span>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-            {/* Version List */}
-            <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-              {versionHistory.map((v) => (
-                <div
-                  key={v.version}
-                  className={`p-2.5 rounded-lg border flex items-center justify-between transition-colors ${
-                    profile?.profileVersion === v.version
-                      ? "border-indigo-600 bg-indigo-950/30"
-                      : "border-slate-800 bg-slate-950/60 hover:bg-slate-900"
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-200">v{v.version}</span>
-                      {v.finalizedAt && (
-                        <span className="text-[10px] text-emerald-400 font-mono">Finalized</span>
-                      )}
-                    </div>
-                    <span className="text-[10px] text-slate-400">
-                      {new Date(v.createdAt).toLocaleTimeString()} • Phases: {v.profile.phases.length}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => onProfileSelect?.(v.profile)}
-                      className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px]"
-                    >
-                      Restore
-                    </button>
-                    <button
-                      onClick={() => setDiffVersionA(v.version)}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
-                        diffVersionA === v.version
-                          ? "bg-indigo-600 text-white"
-                          : "bg-slate-800 text-slate-400 hover:text-slate-200"
-                      }`}
-                    >
-                      A
-                    </button>
-                    <button
-                      onClick={() => setDiffVersionB(v.version)}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
-                        diffVersionB === v.version
-                          ? "bg-indigo-600 text-white"
-                          : "bg-slate-800 text-slate-400 hover:text-slate-200"
-                      }`}
-                    >
-                      B
-                    </button>
-                  </div>
-                </div>
-              ))}
+          {isHistoryLoading ? (
+            <div className="p-8 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" />
+              <span>Loading version history...</span>
             </div>
-
-            {/* Two-Version Comparison Panel */}
-            <div className="bg-slate-950/80 rounded-lg border border-slate-800 p-3 flex flex-col justify-between">
-              <div>
-                <span className="font-semibold text-slate-300 block mb-2">
-                  Diff: Version {diffVersionA || "—"} vs Version {diffVersionB || "—"}
-                </span>
-                {versionA && versionB ? (
-                  <div className="space-y-2 text-[11px] font-mono">
-                    <div className="bg-slate-900 p-2 rounded border border-slate-800 space-y-1">
+          ) : historySummaries.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-500 bg-slate-950/40 rounded-lg border border-slate-800/60">
+              No saved profile versions found. Generate or refine a profile to create versions.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              {/* Version List */}
+              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                {[...historySummaries]
+                  .sort((a, b) => b.version - a.version)
+                  .map((v) => (
+                    <div
+                      key={v.version}
+                      className={`p-2.5 rounded-lg border flex items-center justify-between transition-colors ${
+                        profile?.profileVersion === v.version
+                          ? "border-indigo-600 bg-indigo-950/30"
+                          : "border-slate-800 bg-slate-950/60 hover:bg-slate-900"
+                      }`}
+                    >
                       <div>
-                        Phases: v{versionA.version} ({versionA.profile.phases.length}) → v{versionB.version} ({versionB.profile.phases.length})
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-200">v{v.version}</span>
+                          {v.finalizedAt && (
+                            <span className="text-[10px] text-emerald-400 font-mono">Finalized</span>
+                          )}
+                          {v.costUsd !== undefined && v.costUsd > 0 && (
+                            <span className="text-[10px] text-slate-400 font-mono">${v.costUsd.toFixed(4)}</span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-400">
+                          {new Date(v.createdAt).toLocaleTimeString()} • Phases: {v.phaseCount}
+                        </span>
                       </div>
-                      <div>
-                        Scale: {versionA.profile.scale.requestsPerDay} → {versionB.profile.scale.requestsPerDay} req/day
-                      </div>
-                      <div>
-                        Components: {versionA.profile.components.length} → {versionB.profile.components.length}
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleRestoreVersion(v.version)}
+                          className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px]"
+                        >
+                          Restore
+                        </button>
+                        <button
+                          onClick={() => handleSelectDiffA(v.version)}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                            diffVersionA === v.version
+                              ? "bg-indigo-600 text-white"
+                              : "bg-slate-800 text-slate-400 hover:text-slate-200"
+                          }`}
+                        >
+                          A
+                        </button>
+                        <button
+                          onClick={() => handleSelectDiffB(v.version)}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                            diffVersionB === v.version
+                              ? "bg-indigo-600 text-white"
+                              : "bg-slate-800 text-slate-400 hover:text-slate-200"
+                          }`}
+                        >
+                          B
+                        </button>
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <p className="text-slate-500 text-xs italic">
-                    Select version A and version B using the buttons on the left to see comparison.
-                  </p>
-                )}
+                  ))}
+              </div>
+
+              {/* Two-Version Comparison Panel */}
+              <div className="bg-slate-950/80 rounded-lg border border-slate-800 p-3 flex flex-col justify-between">
+                <div>
+                  <span className="font-semibold text-slate-300 block mb-2">
+                    Diff: Version {diffVersionA || "—"} vs Version {diffVersionB || "—"}
+                  </span>
+                  {versionA && versionB ? (
+                    <div className="space-y-2 text-[11px] font-mono">
+                      <div className="bg-slate-900 p-2 rounded border border-slate-800 space-y-1">
+                        <div>
+                          Phases: v{versionA.profileVersion} ({versionA.phases.length}) → v{versionB.profileVersion} ({versionB.phases.length})
+                        </div>
+                        <div>
+                          Scale: {versionA.scale.requestsPerDay} → {versionB.scale.requestsPerDay} req/day
+                        </div>
+                        <div>
+                          Components: {versionA.components.length} → {versionB.components.length}
+                        </div>
+                      </div>
+                    </div>
+                  ) : diffVersionA !== null && diffVersionB !== null ? (
+                    <p className="text-slate-400 text-xs italic">
+                      Loading profile details for diff comparison...
+                    </p>
+                  ) : (
+                    <p className="text-slate-500 text-xs italic">
+                      Select version A and version B using the buttons on the left to see comparison.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>

@@ -14,5 +14,10 @@ export * from "./providers/OpenAICompatibleAdapter.js";
 export * from "./providers/CostCalculator.js";
 export * from "./profile/schema.js";
 export * from "./phases/PhaseSuggester.js";
+export * from "./phases/PhaseResolver.js";
+export * from "./estimation/TokenizerLayer.js";
+export * from "./estimation/ParamResolver.js";
+export * from "./estimation/EstimationEngine.js";
+export * from "./strategies/SavingsAggregator.js";
 
 export const CORE_VERSION = "0.1.0";

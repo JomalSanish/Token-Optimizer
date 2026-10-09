@@ -165,4 +165,57 @@ describe("ProfileHistoryStore Unit Tests (T060, T065, FR-014, FR-015)", () => {
     expect(draft?.costUsd).toBe(0);
     expect(draft?.finalizedAt).toBeUndefined();
   });
+
+  it("returns lightweight summaries and drops corrupted or schema-invalid stored records", async () => {
+    // Inject valid record and corrupted/invalid records directly into memento
+    const validProfile = createMockProfile(1);
+    const corruptedRecord = {
+      version: 2,
+      narrative: "Broken",
+      profile: { broken: "not a profile", schemaVersion: 123 },
+    };
+    const missingProfileRecord = {
+      version: 3,
+      narrative: "Missing",
+    };
+
+    await memento.update("tokenOptimizer.profileHistory", [
+      {
+        version: 1,
+        narrative: "Valid v1",
+        profile: validProfile,
+        createdAt: "2026-10-09T00:00:00.000Z",
+        finalizedAt: "2026-10-09T01:00:00.000Z",
+        costUsd: 0.042,
+      },
+      corruptedRecord,
+      missingProfileRecord,
+    ]);
+
+    const all = historyStore.getAll();
+    expect(all).toHaveLength(1);
+    expect(all[0].version).toBe(1);
+
+    const summaries = historyStore.getSummaries();
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toEqual({
+      version: 1,
+      createdAt: "2026-10-09T00:00:00.000Z",
+      finalizedAt: "2026-10-09T01:00:00.000Z",
+      phaseCount: 1,
+      costUsd: 0.042,
+    });
+  });
+
+  it("clears all stored profile history entries", async () => {
+    await historyStore.add({
+      narrative: "Sample profile",
+      profile: createMockProfile(1),
+    });
+    expect(historyStore.getAll()).toHaveLength(1);
+
+    await historyStore.clear();
+    expect(historyStore.getAll()).toHaveLength(0);
+    expect(historyStore.getSummaries()).toHaveLength(0);
+  });
 });

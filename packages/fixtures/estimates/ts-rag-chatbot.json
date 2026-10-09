@@ -1,0 +1,474 @@
+{
+  "profileVersion": 1,
+  "currency": "USD",
+  "build": {
+    "phases": [
+      {
+        "phaseId": "phase-architecture",
+        "phaseName": "Architecture & Scaffolding",
+        "params": {
+          "calls": {
+            "low": 1,
+            "expected": 5,
+            "high": 15
+          },
+          "tokensPerCall": {
+            "low": 1000,
+            "expected": 4000,
+            "high": 10000
+          },
+          "retries": {
+            "low": 0,
+            "expected": 1,
+            "high": 3
+          },
+          "volumeMultiplier": {
+            "low": 1,
+            "expected": 1,
+            "high": 1
+          }
+        },
+        "tokensByModel": {
+          "claude-3-5-sonnet-20241022": {
+            "inputTokens": 120000,
+            "outputTokens": 40000,
+            "totalTokens": 160000,
+            "label": "approximate",
+            "approximationMargin": "±15%"
+          },
+          "claude-3-5-haiku-20241022": {
+            "inputTokens": 120000,
+            "outputTokens": 40000,
+            "totalTokens": 160000,
+            "label": "approximate",
+            "approximationMargin": "±15%"
+          },
+          "gpt-4o": {
+            "inputTokens": 120000,
+            "outputTokens": 40000,
+            "totalTokens": 160000,
+            "label": "exact"
+          },
+          "gpt-4o-mini": {
+            "inputTokens": 120000,
+            "outputTokens": 40000,
+            "totalTokens": 160000,
+            "label": "exact"
+          }
+        },
+        "costByModel": {
+          "claude-3-5-sonnet-20241022": {
+            "low": 0.024,
+            "expected": 0.96,
+            "high": 14.4,
+            "currency": "USD",
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+          },
+          "claude-3-5-haiku-20241022": {
+            "low": 0.008,
+            "expected": 0.32,
+            "high": 4.8,
+            "currency": "USD",
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+          },
+          "gpt-4o": {
+            "low": 0.0175,
+            "expected": 0.7,
+            "high": 10.5,
+            "currency": "USD",
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+          },
+          "gpt-4o-mini": {
+            "low": 0.0011,
+            "expected": 0.042,
+            "high": 0.63,
+            "currency": "USD",
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+          }
+        },
+        "explainTree": {
+          "label": "Phase Cost: Architecture & Scaffolding",
+          "formula": "(regularInputCost + cachedInputCost + outputCost)",
+          "inputs": {
+            "model": "Claude 3.5 Sonnet",
+            "track": "build",
+            "callsExpected": 5,
+            "tokensPerCallExpected": 4000,
+            "retriesExpected": 1,
+            "volumeExpected": 40,
+            "inputPerMTok": 3,
+            "outputPerMTok": 15
+          },
+          "result": 0.96,
+          "children": [
+            {
+              "label": "Call Volume",
+              "formula": "calls * (1 + retries) * iterations",
+              "inputs": {
+                "calls": 5,
+                "retries": 1,
+                "iterations": 4
+              },
+              "result": 40
+            },
+            {
+              "label": "Tokens Per Call Breakdown",
+              "formula": "regularInput + cachedInput + output",
+              "inputs": {
+                "regularInput": 3000,
+                "cachedInput": 0,
+                "output": 1000
+              },
+              "result": 4000
+            },
+            {
+              "label": "Total Expected Phase Tokens",
+              "formula": "volumeExpected * tokensPerCallExpected",
+              "inputs": {
+                "volumeExpected": 40,
+                "tokensPerCallExpected": 4000
+              },
+              "result": 160000
+            }
+          ]
+        }
+      },
+      {
+        "phaseId": "phase-implementation",
+        "phaseName": "Feature Implementation",
+        "params": {
+          "calls": {
+            "low": 5,
+            "expected": 20,
+            "high": 80
+          },
+          "tokensPerCall": {
+            "low": 800,
+            "expected": 2500,
+            "high": 8000
+          },
+          "retries": {
+            "low": 0,
+            "expected": 2,
+            "high": 5
+          },
+          "volumeMultiplier": {
+            "low": 1,
+            "expected": 1,
+            "high": 1
+          }
+        },
+        "tokensByModel": {
+          "claude-3-5-sonnet-20241022": {
+            "inputTokens": 224880,
+            "outputTokens": 150000,
+            "cachedInputTokens": 225120,
+            "totalTokens": 600000,
+            "label": "approximate",
+            "approximationMargin": "±15%"
+          },
+          "claude-3-5-haiku-20241022": {
+            "inputTokens": 224880,
+            "outputTokens": 150000,
+            "cachedInputTokens": 225120,
+            "totalTokens": 600000,
+            "label": "approximate",
+            "approximationMargin": "±15%"
+          },
+          "gpt-4o": {
+            "inputTokens": 224880,
+            "outputTokens": 150000,
+            "cachedInputTokens": 225120,
+            "totalTokens": 600000,
+            "label": "exact"
+          },
+          "gpt-4o-mini": {
+            "inputTokens": 224880,
+            "outputTokens": 150000,
+            "cachedInputTokens": 225120,
+            "totalTokens": 600000,
+            "label": "exact"
+          }
+        },
+        "costByModel": {
+          "claude-3-5-sonnet-20241022": {
+            "low": 0.0798,
+            "expected": 2.9922,
+            "high": 76.608,
+            "currency": "USD",
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+          },
+          "claude-3-5-haiku-20241022": {
+            "low": 0.0266,
+            "expected": 0.9974,
+            "high": 25.536,
+            "currency": "USD",
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+          },
+          "gpt-4o": {
+            "low": 0.0625,
+            "expected": 2.3436,
+            "high": 60,
+            "currency": "USD",
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+          },
+          "gpt-4o-mini": {
+            "low": 0.0038,
+            "expected": 0.1406,
+            "high": 3.6,
+            "currency": "USD",
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+          }
+        },
+        "explainTree": {
+          "label": "Phase Cost: Feature Implementation",
+          "formula": "(regularInputCost + cachedInputCost + outputCost)",
+          "inputs": {
+            "model": "Claude 3.5 Sonnet",
+            "track": "build",
+            "callsExpected": 20,
+            "tokensPerCallExpected": 2500,
+            "retriesExpected": 2,
+            "volumeExpected": 240,
+            "inputPerMTok": 3,
+            "outputPerMTok": 15
+          },
+          "result": 2.9922,
+          "children": [
+            {
+              "label": "Call Volume",
+              "formula": "calls * (1 + retries) * iterations",
+              "inputs": {
+                "calls": 20,
+                "retries": 2,
+                "iterations": 4
+              },
+              "result": 240
+            },
+            {
+              "label": "Tokens Per Call Breakdown",
+              "formula": "regularInput + cachedInput + output",
+              "inputs": {
+                "regularInput": 937,
+                "cachedInput": 938,
+                "output": 625
+              },
+              "result": 2500
+            },
+            {
+              "label": "Total Expected Phase Tokens",
+              "formula": "volumeExpected * tokensPerCallExpected",
+              "inputs": {
+                "volumeExpected": 240,
+                "tokensPerCallExpected": 2500
+              },
+              "result": 600000
+            }
+          ]
+        }
+      }
+    ],
+    "totalByModel": {
+      "claude-3-5-sonnet-20241022": {
+        "low": 0.1038,
+        "expected": 3.9522,
+        "high": 91.008,
+        "currency": "USD",
+        "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+      },
+      "claude-3-5-haiku-20241022": {
+        "low": 0.0346,
+        "expected": 1.3174,
+        "high": 30.336,
+        "currency": "USD",
+        "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+      },
+      "gpt-4o": {
+        "low": 0.08,
+        "expected": 3.0436,
+        "high": 70.5,
+        "currency": "USD",
+        "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+      },
+      "gpt-4o-mini": {
+        "low": 0.0049,
+        "expected": 0.1826,
+        "high": 4.23,
+        "currency": "USD",
+        "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+      }
+    }
+  },
+  "runtime": {
+    "phases": [
+      {
+        "phaseId": "phase-query-answering",
+        "phaseName": "Runtime Query Processing",
+        "params": {
+          "calls": {
+            "low": 100,
+            "expected": 1000,
+            "high": 10000
+          },
+          "tokensPerCall": {
+            "low": 500,
+            "expected": 2000,
+            "high": 6000
+          },
+          "retries": {
+            "low": 0,
+            "expected": 0,
+            "high": 1
+          },
+          "volumeMultiplier": {
+            "low": 1,
+            "expected": 1,
+            "high": 1.5
+          }
+        },
+        "tokensByModel": {
+          "claude-3-5-sonnet-20241022": {
+            "inputTokens": 4125000000,
+            "outputTokens": 2750000000,
+            "cachedInputTokens": 4125000000,
+            "totalTokens": 11000000000,
+            "label": "approximate",
+            "approximationMargin": "±15%"
+          },
+          "claude-3-5-haiku-20241022": {
+            "inputTokens": 4125000000,
+            "outputTokens": 2750000000,
+            "cachedInputTokens": 4125000000,
+            "totalTokens": 11000000000,
+            "label": "approximate",
+            "approximationMargin": "±15%"
+          },
+          "gpt-4o": {
+            "inputTokens": 4125000000,
+            "outputTokens": 2750000000,
+            "cachedInputTokens": 4125000000,
+            "totalTokens": 11000000000,
+            "label": "exact"
+          },
+          "gpt-4o-mini": {
+            "inputTokens": 4125000000,
+            "outputTokens": 2750000000,
+            "cachedInputTokens": 4125000000,
+            "totalTokens": 11000000000,
+            "label": "exact"
+          }
+        },
+        "costByModel": {
+          "claude-3-5-sonnet-20241022": {
+            "low": 1370.82,
+            "expected": 54862.5,
+            "high": 4937625,
+            "currency": "USD",
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+          },
+          "claude-3-5-haiku-20241022": {
+            "low": 456.94,
+            "expected": 18287.5,
+            "high": 1645875,
+            "currency": "USD",
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+          },
+          "gpt-4o": {
+            "low": 1073.875,
+            "expected": 42968.75,
+            "high": 3867187.5,
+            "currency": "USD",
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+          },
+          "gpt-4o-mini": {
+            "low": 64.4325,
+            "expected": 2578.125,
+            "high": 232031.25,
+            "currency": "USD",
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+          }
+        },
+        "explainTree": {
+          "label": "Phase Cost: Runtime Query Processing",
+          "formula": "(regularInputCost + cachedInputCost + outputCost)",
+          "inputs": {
+            "model": "Claude 3.5 Sonnet",
+            "track": "runtime",
+            "callsExpected": 1000,
+            "tokensPerCallExpected": 2000,
+            "retriesExpected": 0,
+            "volumeExpected": 5500000,
+            "inputPerMTok": 3,
+            "outputPerMTok": 15
+          },
+          "result": 54862.5,
+          "children": [
+            {
+              "label": "Call Volume",
+              "formula": "calls * (1 + retries) * volumeMultiplier * requestsPerDay * monthlyDays",
+              "inputs": {
+                "calls": 1000,
+                "retries": 0,
+                "volumeMultiplier": 1,
+                "requestsPerDay": 250,
+                "monthlyDays": 22
+              },
+              "result": 5500000
+            },
+            {
+              "label": "Tokens Per Call Breakdown",
+              "formula": "regularInput + cachedInput + output",
+              "inputs": {
+                "regularInput": 750,
+                "cachedInput": 750,
+                "output": 500
+              },
+              "result": 2000
+            },
+            {
+              "label": "Total Expected Phase Tokens",
+              "formula": "volumeExpected * tokensPerCallExpected",
+              "inputs": {
+                "volumeExpected": 5500000,
+                "tokensPerCallExpected": 2000
+              },
+              "result": 11000000000
+            }
+          ]
+        }
+      }
+    ],
+    "totalByModel": {
+      "claude-3-5-sonnet-20241022": {
+        "low": 1370.82,
+        "expected": 54862.5,
+        "high": 4937625,
+        "currency": "USD",
+        "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+      },
+      "claude-3-5-haiku-20241022": {
+        "low": 456.94,
+        "expected": 18287.5,
+        "high": 1645875,
+        "currency": "USD",
+        "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+      },
+      "gpt-4o": {
+        "low": 1073.875,
+        "expected": 42968.75,
+        "high": 3867187.5,
+        "currency": "USD",
+        "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+      },
+      "gpt-4o-mini": {
+        "low": 64.4325,
+        "expected": 2578.125,
+        "high": 232031.25,
+        "currency": "USD",
+        "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+      }
+    }
+  },
+  "totalExpectedCost": 54866.4522,
+  "generatedAt": "2026-10-09T06:56:50.332Z"
+}

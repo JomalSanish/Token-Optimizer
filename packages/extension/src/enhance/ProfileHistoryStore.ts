@@ -1,5 +1,10 @@
 import type * as vscode from "vscode";
-import type { ProfileHistoryEntry, ProfilePhase } from "@token-optimizer/core";
+import {
+  ProjectProfileSchema,
+  type ProfileHistoryEntry,
+  type ProfileHistorySummary,
+  type ProfilePhase,
+} from "@token-optimizer/core";
 
 export const PROFILE_HISTORY_STORAGE_KEY = "tokenOptimizer.profileHistory";
 export const MAX_PROFILE_HISTORY_VERSIONS = 20;
@@ -12,7 +17,8 @@ export class ProfileHistoryStore {
   }
 
   /**
-   * Retrieves all profile history entries, sorted by version ascending.
+   * Retrieves all valid profile history entries, sorted by version ascending.
+   * Validates each stored entry against ProjectProfileSchema and drops any invalid entries.
    */
   public getAll(): ProfileHistoryEntry[] {
     const raw = this.workspaceState.get<ProfileHistoryEntry[]>(
@@ -22,7 +28,30 @@ export class ProfileHistoryStore {
     if (!Array.isArray(raw)) {
       return [];
     }
-    return [...raw].sort((a, b) => a.version - b.version);
+
+    // Validate against ProjectProfileSchema and drop corrupted or obsolete records
+    const valid = raw.filter((entry) => {
+      if (!entry || typeof entry.version !== "number" || !entry.profile) {
+        return false;
+      }
+      const parseResult = ProjectProfileSchema.safeParse(entry.profile);
+      return parseResult.success;
+    });
+
+    return [...valid].sort((a, b) => a.version - b.version);
+  }
+
+  /**
+   * Returns lightweight metadata summaries for webview hydration without sending full profiles.
+   */
+  public getSummaries(): ProfileHistorySummary[] {
+    return this.getAll().map((e) => ({
+      version: e.version,
+      createdAt: e.createdAt,
+      finalizedAt: e.finalizedAt,
+      phaseCount: Array.isArray(e.profile?.phases) ? e.profile.phases.length : 0,
+      costUsd: e.costUsd,
+    }));
   }
 
   /**

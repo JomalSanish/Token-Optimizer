@@ -211,6 +211,13 @@ export const App: React.FC = () => {
           );
           break;
 
+        case "enhance/versionLoaded":
+          setProfile(msg.payload.entry.profile);
+          if (msg.payload.entry.narrative) {
+            setNarrative(msg.payload.entry.narrative);
+          }
+          break;
+
         case "enhance/error":
           setIsEnhanceStreaming(false);
           setErrorBanner(`Enhance stage failed: ${msg.payload.message}`);
@@ -355,6 +362,9 @@ export const App: React.FC = () => {
             estimation={estimation}
             isLoading={isEstimating}
             profileVersion={currentProfileVersion}
+            profile={profile}
+            catalogPhases={catalogPhases}
+            models={models}
           />
         )}
 

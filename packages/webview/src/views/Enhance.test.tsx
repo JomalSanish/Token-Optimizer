@@ -62,9 +62,11 @@ describe("Enhance View Component (T063, T133, FR-009, FR-012, FR-015, Principle 
       target: { value: "Build a customer support AI chatbot" },
     });
 
-    // Press Enter alone -> should NOT call postMessage
+    // Press Enter alone -> should NOT submit enhance/run
     fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: false, metaKey: false });
-    expect(postSpy).not.toHaveBeenCalled();
+    expect(postSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "enhance/run" })
+    );
 
     // Press Ctrl+Enter -> triggers enhance/run
     fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true, metaKey: false });
@@ -180,5 +182,82 @@ describe("Enhance View Component (T063, T133, FR-009, FR-012, FR-015, Principle 
         profileVersion: 1,
       },
     });
+  });
+
+  it("requests history on mount and renders history drawer with summaries, restore and clear buttons", () => {
+    const postSpy = vi.spyOn(vscodeBridge, "postMessage");
+    const mockProfile = createMockProfile(1, true);
+
+    const initialSummaries = [
+      {
+        version: 1,
+        createdAt: "2026-10-09T00:00:00.000Z",
+        phaseCount: 1,
+        costUsd: 0.025,
+      },
+    ];
+
+    render(
+      <Enhance
+        profile={mockProfile}
+        narrative=""
+        isStreaming={false}
+        costUsd={0}
+        initialHistorySummaries={initialSummaries}
+      />
+    );
+
+    // Verify enhance/getHistory was requested on mount
+    expect(postSpy).toHaveBeenCalledWith({
+      version: 1,
+      type: "enhance/getHistory",
+      payload: {},
+    });
+
+    // Open History drawer
+    const historyBtn = screen.getByRole("button", { name: /History \(1\)/ });
+    expect(historyBtn).toBeDefined();
+    fireEvent.click(historyBtn);
+
+    // Check version summary rendered
+    expect(screen.getByText("v1")).toBeDefined();
+    expect(screen.getByText(/Phases: 1/)).toBeDefined();
+
+    // Click Restore
+    const restoreBtn = screen.getByRole("button", { name: /Restore/ });
+    fireEvent.click(restoreBtn);
+    expect(postSpy).toHaveBeenCalledWith({
+      version: 1,
+      type: "enhance/getVersion",
+      payload: { version: 1 },
+    });
+
+    // Click Clear History
+    const clearBtn = screen.getByRole("button", { name: /Clear History/ });
+    fireEvent.click(clearBtn);
+    expect(postSpy).toHaveBeenCalledWith({
+      version: 1,
+      type: "enhance/clearHistory",
+      payload: {},
+    });
+  });
+
+  it("shows empty state when no history summaries are present", () => {
+    const mockProfile = createMockProfile(1, true);
+
+    render(
+      <Enhance
+        profile={mockProfile}
+        narrative=""
+        isStreaming={false}
+        costUsd={0}
+        initialHistorySummaries={[]}
+      />
+    );
+
+    const historyBtn = screen.getByRole("button", { name: /History \(0\)/ });
+    fireEvent.click(historyBtn);
+
+    expect(screen.getByText(/No saved profile versions found/i)).toBeDefined();
   });
 });

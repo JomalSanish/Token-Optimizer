@@ -10,6 +10,7 @@ import {
 } from "@token-optimizer/core";
 import { KeyService } from "../secrets/KeyService.js";
 import { ProfileHistoryStore } from "./ProfileHistoryStore.js";
+import { TaxonomyPromptBuilder } from "./TaxonomyPromptBuilder.js";
 
 export interface EnhanceRequest {
   description: string;
@@ -71,27 +72,55 @@ export class EnhanceService {
       (t) => t.purpose === "enhance" && t.active
     ) || snapshot?.promptTemplates.find((t) => t.purpose === "enhance");
 
-    const phasesTaxonomyText = catalogPhases
-      .map((p) => `- ${p.id} (${p.track}): ${p.name} - ${p.description}`)
-      .join("\n");
+    // If refining a previous profile version, include previous context to avoid duplicating sections
+    let previousProfileContext = "";
+    if (previousProfileVersion) {
+      const prevEntry = this.historyStore.getVersion(previousProfileVersion);
+      if (prevEntry) {
+        previousProfileContext = `\n\nPrevious Profile Version ${previousProfileVersion} to refine:\n${JSON.stringify(
+          prevEntry.profile
+        )}`;
+      }
+    }
+
+    const model = snapshot?.models.find((m) => m.id === modelId);
+    let taxonomyResult: {
+      level: "full" | "short" | "compact";
+      phasesTaxonomyText: string;
+      estimatedTaxonomyTokens: number;
+      availableBudgetTokens: number;
+    };
+    try {
+      taxonomyResult = TaxonomyPromptBuilder.buildTaxonomyText({
+        modelContextWindow: model?.contextWindow ?? 128000,
+        modelMaxOutput: model?.maxOutput ?? 4096,
+        description,
+        previousProfileContext,
+        catalogPhases,
+      });
+    } catch (err) {
+      await this.postMessage({
+        version: 1,
+        type: "enhance/error",
+        payload: {
+          error: "llm-failed",
+          message: err instanceof Error ? err.message : String(err),
+        },
+      });
+      return null;
+    }
 
     let promptText: string;
     if (promptTemplate) {
       promptText = promptTemplate.template
         .replace("{{description}}", description)
-        .replace("{{phasesTaxonomy}}", phasesTaxonomyText);
+        .replace("{{phasesTaxonomy}}", taxonomyResult.phasesTaxonomyText);
     } else {
-      promptText = `Analyze project architecture and generate token optimization profile.\n\nProject:\n${description}\n\nPhases:\n${phasesTaxonomyText}\n\nOutput JSON with "narrative" and "profile" conforming to ProjectProfileSchema.`;
+      promptText = `Analyze project architecture and generate token optimization profile.\n\nProject:\n${description}\n\nPhases:\n${taxonomyResult.phasesTaxonomyText}\n\nOutput JSON with "narrative" and "profile" conforming to ProjectProfileSchema.`;
     }
 
-    // If refining a previous profile version, include previous context to avoid duplicating sections
-    if (previousProfileVersion) {
-      const prevEntry = this.historyStore.getVersion(previousProfileVersion);
-      if (prevEntry) {
-        promptText += `\n\nPrevious Profile Version ${previousProfileVersion} to refine:\n${JSON.stringify(
-          prevEntry.profile
-        )}`;
-      }
+    if (previousProfileContext) {
+      promptText += previousProfileContext;
     }
 
     const messages: ChatMessage[] = [
@@ -214,9 +243,16 @@ export class EnhanceService {
     }
 
     // Stream narrative preview deltas
+    // If taxonomy budget degradation occurred, note it in the narrative stream so it is explainable
+    let streamNarrative = narrative;
+    if (taxonomyResult.level !== "full") {
+      const budgetNote = `[Taxonomy budget level: ${taxonomyResult.level} - prompt compacted to fit context budget]\n\n`;
+      streamNarrative = budgetNote + narrative;
+    }
+
     const chunkSize = 40;
-    for (let i = 0; i < narrative.length; i += chunkSize) {
-      const delta = narrative.slice(i, i + chunkSize);
+    for (let i = 0; i < streamNarrative.length; i += chunkSize) {
+      const delta = streamNarrative.slice(i, i + chunkSize);
       await this.postMessage({
         version: 1,
         type: "enhance/stream",
@@ -260,6 +296,16 @@ export class EnhanceService {
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
         costUsd,
+        taxonomyBudgetLevel: taxonomyResult.level,
+      },
+    });
+
+    // Hydrate webview history summaries
+    await this.postMessage({
+      version: 1,
+      type: "enhance/historyLoaded",
+      payload: {
+        summaries: this.historyStore.getSummaries(),
       },
     });
 

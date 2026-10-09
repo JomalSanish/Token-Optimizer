@@ -130,7 +130,9 @@ const mockCatalogSnapshot: CatalogSnapshot = {
       name: "Runtime Query Answering",
       track: "runtime",
       sortOrder: 1,
-      description: "Runtime RAG processing",
+      description:
+        "Handles runtime semantic document retrieval, prompt augmentation, and LLM query execution.",
+      shortDescription: "Runtime retrieval and LLM response execution",
       archetypes: ["rag-chatbot", "general"],
       defaultParams: {
         callsLow: 100,
@@ -150,7 +152,9 @@ const mockCatalogSnapshot: CatalogSnapshot = {
       name: "Architecture & Scaffolding",
       track: "build",
       sortOrder: 2,
-      description: "Architecture setup",
+      description:
+        "Scaffolds initial project structure, tech stack definitions, and repository setup.",
+      shortDescription: "Scaffolding and initial repository setup",
       archetypes: ["rag-chatbot", "general"],
       defaultParams: {
         callsLow: 1,
@@ -205,11 +209,11 @@ describe("EnhanceService Unit Tests (T059, T064, FR-010-FR-013)", () => {
     };
   });
 
-  function createService(): EnhanceService {
+  function createService(snapshot = mockCatalogSnapshot): EnhanceService {
     return new EnhanceService({
       keyService,
       adapters: new Map([["anthropic", mockAdapter]]),
-      getCatalogSnapshot: () => mockCatalogSnapshot,
+      getCatalogSnapshot: () => snapshot,
       postMessage: async (msg) => {
         postedMessages.push(msg);
       },
@@ -410,5 +414,112 @@ describe("EnhanceService Unit Tests (T059, T064, FR-010-FR-013)", () => {
       expect(phase.source).toBe("taxonomy-suggestion");
       expect(phase.confirmed).toBe(false);
     }
+  });
+
+  it("records taxonomyBudgetLevel in result and narrative stream when budget degrades", async () => {
+    // Clone snapshot with small-window model (e.g. 793 window -> degrades to short)
+    const customSnapshot: CatalogSnapshot = {
+      ...mockCatalogSnapshot,
+      models: [
+        {
+          id: "small-model",
+          providerId: "anthropic",
+          label: "Small Model",
+          contextWindow: 760,
+          maxOutput: 100,
+          tier: "economy",
+          supportsCaching: false,
+          supportsBatch: false,
+          supportsStructuredOutput: true,
+          tokenizer: { kind: "tiktoken" },
+          status: "active",
+          addedAt: "2026-10-09",
+        },
+      ],
+    };
+
+    const service = createService(customSnapshot);
+
+    vi.mocked(mockAdapter.complete).mockResolvedValueOnce({
+      content: JSON.stringify({
+        narrative: "Synthesized architecture.",
+        profile: createSampleProfilePayload(),
+      }),
+      inputTokens: 300,
+      outputTokens: 100,
+    });
+
+    const result = await service.run({
+      description: "A customer support bot.",
+      providerId: "anthropic",
+      modelId: "small-model",
+    });
+
+    expect(result).toBeDefined();
+
+    // Verify stream contained taxonomy budget level notice
+    const streamMsgs = postedMessages.filter(
+      (m): m is Extract<HostToWebviewMsg, { type: "enhance/stream" }> =>
+        m.type === "enhance/stream"
+    );
+    expect(streamMsgs.length).toBeGreaterThan(0);
+    const fullStreamText = streamMsgs.map((m) => m.payload.delta).join("");
+    expect(fullStreamText).toContain("[Taxonomy budget level: short");
+
+    // Verify result contained taxonomyBudgetLevel
+    const resultMsg = postedMessages.find(
+      (m): m is Extract<HostToWebviewMsg, { type: "enhance/result" }> =>
+        m.type === "enhance/result"
+    );
+    expect(resultMsg).toBeDefined();
+    expect(resultMsg?.payload.taxonomyBudgetLevel).toBe("short");
+
+    // Verify historyLoaded was sent
+    const historyMsg = postedMessages.find(
+      (m): m is Extract<HostToWebviewMsg, { type: "enhance/historyLoaded" }> =>
+        m.type === "enhance/historyLoaded"
+    );
+    expect(historyMsg).toBeDefined();
+    expect(historyMsg?.payload.summaries).toHaveLength(1);
+  });
+
+  it("posts enhance/error when model context window is too small for Enhance", async () => {
+    // Model with contextWindow smaller than fixed overhead + compact tokens
+    const tinySnapshot: CatalogSnapshot = {
+      ...mockCatalogSnapshot,
+      models: [
+        {
+          id: "tiny-model",
+          providerId: "anthropic",
+          label: "Tiny Model",
+          contextWindow: 720,
+          maxOutput: 100,
+          tier: "economy",
+          supportsCaching: false,
+          supportsBatch: false,
+          supportsStructuredOutput: true,
+          tokenizer: { kind: "tiktoken" },
+          status: "active",
+          addedAt: "2026-10-09",
+        },
+      ],
+    };
+
+    const service = createService(tinySnapshot);
+
+    const result = await service.run({
+      description: "A customer support bot.",
+      providerId: "anthropic",
+      modelId: "tiny-model",
+    });
+
+    expect(result).toBeNull();
+    const errorMsg = postedMessages.find(
+      (m): m is Extract<HostToWebviewMsg, { type: "enhance/error" }> =>
+        m.type === "enhance/error"
+    );
+    expect(errorMsg).toBeDefined();
+    expect(errorMsg?.payload.error).toBe("llm-failed");
+    expect(errorMsg?.payload.message).toMatch(/is too small for Enhance/i);
   });
 });
