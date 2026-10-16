@@ -1,3 +1,9 @@
+/**
+ * Resolves per-phase estimation parameters from catalog defaults, profile values and overrides.
+ *
+ * Exports: ParamValidationError, MetricRange, ResolvedParams, resolveParams, ParamResolver
+ * Feature: token cost estimator
+ */
 import type { Phase, PhaseOverride } from "../protocol/types.js";
 
 export class ParamValidationError extends Error {

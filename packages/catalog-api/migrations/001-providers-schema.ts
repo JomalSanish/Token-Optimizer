@@ -1,3 +1,10 @@
+/**
+ * Migration 001: normalizes provider documents (id, label, adapterType, baseUrl, keyFormatHint,
+ * enabled).
+ *
+ * Exports: up
+ * Feature: catalog
+ */
 import type { Db } from "mongodb";
 
 /**

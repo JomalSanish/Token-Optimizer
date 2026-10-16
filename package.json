@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
-  "description": "Token Optimizer monorepo - VS Code extension for LLM cost estimation and optimization",
+  "description": "Token Optimizer monorepo - VS Code extension for LLM cost estimation and optimization. pnpm is not required globally: run root scripts with `npx -y pnpm@12.10.1 <script>` (or corepack).",
   "packageManager": "pnpm@12.10.1",
   "engines": {
     "node": ">=20.0.0"
@@ -12,8 +12,15 @@
     "build": "pnpm -r run build",
     "lint": "eslint . --max-warnings 0",
     "test": "pnpm -r run test",
-    "test:tools": "node --test tools/eslint-rules/tests/no-key-in-webview.test.js tools/tests/secret-scan.test.js tools/tests/eslint-config.test.js",
-    "secret-scan": "node tools/scripts/secret-scan.js"
+    "test:tools": "node --test tools/eslint-rules/tests/no-key-in-webview.test.js tools/eslint-rules/tests/require-file-docblock.test.js tools/tests/secret-scan.test.js tools/tests/eslint-config.test.js",
+    "secret-scan": "node tools/scripts/secret-scan.js",
+    "catalog:dev": "tsx packages/catalog-api/scripts/catalog-dev.mts",
+    "harness:serve": "node tools/harness/serve.cjs",
+    "harness:check": "node tools/harness/check.cjs",
+    "demo:workspace": "node tools/scripts/demo-workspace.mjs",
+    "smoke:live": "tsx packages/extension/scripts/smoke-live.mts",
+    "python:bundle": "node packages/python-runtime/scripts/bundle-extension.mjs",
+    "package:vsix": "cd packages/extension && vsce package --no-dependencies -o token-optimizer.vsix"
   },
   "devDependencies": {
     "@eslint/js": "^9.14.0",

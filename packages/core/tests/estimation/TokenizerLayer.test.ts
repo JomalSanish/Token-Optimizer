@@ -1,3 +1,9 @@
+/**
+ * Tests: TokenizerLayer (T068, FR-023, clarification Q4).
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect } from "vitest";
 import {
   getTokenizer,

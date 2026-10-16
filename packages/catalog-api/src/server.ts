@@ -1,3 +1,9 @@
+/**
+ * Builds the Fastify Catalog API server (CORS, optional rate limit, /v1/health, catalog routes).
+ *
+ * Exports: BuildServerOptions, buildServer
+ * Feature: catalog
+ */
 import Fastify, { FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import type { Db } from "mongodb";

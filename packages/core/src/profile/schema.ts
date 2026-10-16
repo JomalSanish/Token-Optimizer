@@ -1,3 +1,12 @@
+/**
+ * ProjectProfile Zod schema (the finalized output of Enhance, input of estimation).
+ *
+ * Exports: ProfilePhaseSchema, ProfileTechStackSchema, ProfileComponentSchema, ProfileLlmSchema,
+ *   ProfileScaleSchema, ProfileBuildAssumptionsSchema, ProjectProfileSchema, ProjectProfile,
+ *   ProfilePhase, ProfileTechStack, ProfileComponent, ProfileLlm, ProfileScale,
+ *   ProfileBuildAssumptions, ProfileHistoryEntry
+ * Feature: token cost estimator
+ */
 import { z } from "zod";
 
 export const ProfilePhaseSchema = z

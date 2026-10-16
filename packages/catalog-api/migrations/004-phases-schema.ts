@@ -1,3 +1,9 @@
+/**
+ * Migration 004: normalizes phase taxonomy documents and their default parameters.
+ *
+ * Exports: up
+ * Feature: catalog
+ */
 import type { Db } from "mongodb";
 
 /**

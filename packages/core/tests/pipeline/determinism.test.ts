@@ -1,3 +1,9 @@
+/**
+ * Tests: Principle XII & Principle IV Determinism Boundary (T149).
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect } from "vitest";
 import {
   SpyProviderAdapter,

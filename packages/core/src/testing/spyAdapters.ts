@@ -1,3 +1,9 @@
+/**
+ * Spy/fake provider adapters for tests (record calls, scripted responses, no network).
+ *
+ * Exports: SpyProviderAdapter, SpyHostModelAdapter, runEstimateStage, runOptimizeStage
+ * Feature: token cost estimator
+ */
 import type {
   EstimateStageInput,
   OptimizeStageInput,

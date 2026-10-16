@@ -1,3 +1,9 @@
+/**
+ * Suggests catalog phases for a project profile.
+ *
+ * Exports: suggestPhases
+ * Feature: token cost estimator
+ */
 import type { ProfilePhase, ProjectProfile } from "../profile/schema.js";
 import type { Phase } from "../protocol/types.js";
 

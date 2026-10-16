@@ -1,3 +1,13 @@
+/**
+ * Extension-host catalog service: loads the catalog (Catalog API -> cache -> bundled snapshot),
+ * refreshes it every 24 h, and delivers it to the webview. Delivery is pull-safe: the current
+ * snapshot + offline flag are re-sent on `webview/ready` and `catalog/request`, so a panel opened
+ * after activation still gets the catalog (fixes the activation-time push race).
+ *
+ * Exports: CatalogService, validateCatalogApiUrl, DEFAULT_CATALOG_API_URL, CatalogUrlValidation,
+ *   CatalogServiceOptions
+ * Feature: catalog
+ */
 import * as vscode from "vscode";
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
@@ -8,6 +18,9 @@ import {
   type CatalogStorage,
 } from "@token-optimizer/core";
 import type { MessageRouter } from "../webview/MessageRouter.js";
+
+/** Demo default: the local Catalog API started by `pnpm catalog:dev`. */
+export const DEFAULT_CATALOG_API_URL = "http://127.0.0.1:3000/v1";
 
 export interface CatalogUrlValidation {
   isValid: boolean;
@@ -22,7 +35,7 @@ export function validateCatalogApiUrl(rawUrl: string | undefined | null): Catalo
     return {
       isValid: true,
       isOfflineMode: false,
-      validatedUrl: "https://catalog.token-optimizer.dev/v1",
+      validatedUrl: DEFAULT_CATALOG_API_URL,
     };
   }
 
@@ -99,6 +112,7 @@ export class CatalogService implements vscode.Disposable {
   private bundledSnapshotPath: string;
   private refreshIntervalMs: number;
   private listeners: Array<(snapshot: CatalogSnapshot, isOffline: boolean) => void> = [];
+  private unregisterHandlers: Array<() => void> = [];
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -128,7 +142,7 @@ export class CatalogService implements vscode.Disposable {
     }
 
     this.isAirGapped = validation.isOfflineMode;
-    const baseUrl = validation.validatedUrl || "https://catalog.token-optimizer.dev/v1";
+    const baseUrl = validation.validatedUrl || DEFAULT_CATALOG_API_URL;
 
     this.client =
       options.client ??
@@ -154,6 +168,17 @@ export class CatalogService implements vscode.Disposable {
 
     // Default 24 hours
     this.refreshIntervalMs = options.refreshIntervalMs ?? 24 * 60 * 60 * 1000;
+
+    // Pull-based delivery: a webview that mounts (or asks) after activation gets the current state.
+    if (this.router) {
+      const resend = async () => {
+        await this.sendToWebview();
+      };
+      this.unregisterHandlers.push(
+        this.router.register("webview/ready", resend),
+        this.router.register("catalog/request", resend)
+      );
+    }
   }
 
   public async initialize(): Promise<CatalogSnapshot> {
@@ -221,6 +246,12 @@ export class CatalogService implements vscode.Disposable {
       }
     }
 
+    await this.sendToWebview();
+  }
+
+  /** Posts `catalog/updated` with the current snapshot and offline flag (no-op until loaded). */
+  public async sendToWebview(): Promise<void> {
+    if (!this.currentSnapshot) return;
     if (this.router) {
       await this.router.send({
         type: "catalog/updated",
@@ -235,6 +266,7 @@ export class CatalogService implements vscode.Disposable {
           strategies: this.currentSnapshot.strategies,
           platforms: this.currentSnapshot.platforms,
           promptTemplates: this.currentSnapshot.promptTemplates,
+          routerPresets: this.currentSnapshot.routerPresets ?? [],
           isOffline: this.offline,
           publishedAt: this.currentSnapshot.publishedAt,
         },
@@ -276,5 +308,7 @@ export class CatalogService implements vscode.Disposable {
       this.refreshTimer = undefined;
     }
     this.listeners = [];
+    for (const unregister of this.unregisterHandlers) unregister();
+    this.unregisterHandlers = [];
   }
 }

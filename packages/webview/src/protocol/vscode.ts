@@ -1,3 +1,10 @@
+/**
+ * Webview side of the message bridge: acquireVsCodeApi wrapper with Zod-validated inbound
+ * messages.
+ *
+ * Exports: vscodeBridge
+ * Feature: shared protocol / webview shell
+ */
 import {
   HostToWebviewMsgSchema,
   type WebviewToHostMsg,

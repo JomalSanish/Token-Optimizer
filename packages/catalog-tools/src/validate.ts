@@ -1,3 +1,9 @@
+/**
+ * Validates catalog collections against the Zod schemas and reports problems.
+ *
+ * Exports: ValidationItemResult, ValidationSummary, validateCatalog
+ * Feature: catalog
+ */
 import { fileURLToPath } from "node:url";
 import * as path from "node:path";
 import { MongoClient, type Db } from "mongodb";

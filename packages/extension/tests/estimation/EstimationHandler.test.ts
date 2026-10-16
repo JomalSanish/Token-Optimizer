@@ -1,3 +1,9 @@
+/**
+ * Tests: EstimationHandler (T072, FR-019, SC-003).
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type * as vscode from "vscode";
 

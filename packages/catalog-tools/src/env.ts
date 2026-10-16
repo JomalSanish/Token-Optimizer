@@ -1,3 +1,9 @@
+/**
+ * Loads a local .env file into process.env for the catalog CLI tools.
+ *
+ * Exports: loadEnv
+ * Feature: catalog
+ */
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";

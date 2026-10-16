@@ -1,9 +1,17 @@
 /**
  * Pure HTML and CSP builder for the Token Optimizer Webview.
  * Independent of VS Code runtime for unit testing (Constitution Principle II).
+ * `hostView` adds `<meta name="token-optimizer-host" content="sidebar|panel">` so the page knows
+ * whether it runs in the sidebar view or the editor-area panel.
+ *
+ * Exports: BuildWebviewHtmlOptions, HostView, buildWebviewCsp, buildWebviewHtml
+ * Feature: shared protocol / webview shell
  */
 
+export type HostView = "sidebar" | "panel";
+
 export interface BuildWebviewHtmlOptions {
+  hostView?: HostView;
   nonce: string;
   cspSource: string;
   template?: string;
@@ -23,8 +31,9 @@ export function buildWebviewCsp(cspSource: string, nonce: string): string {
 }
 
 export function buildWebviewHtml(options: BuildWebviewHtmlOptions): string {
-  const { nonce, cspSource, template, toAssetUri } = options;
+  const { nonce, cspSource, template, toAssetUri, hostView } = options;
   const csp = buildWebviewCsp(cspSource, nonce);
+  const hostMeta = hostView ? `<meta name="token-optimizer-host" content="${hostView}">` : "";
 
   if (template) {
     let html = template;
@@ -43,8 +52,8 @@ export function buildWebviewHtml(options: BuildWebviewHtmlOptions): string {
       );
     }
 
-    // Inject or update Content-Security-Policy meta tag
-    const cspMetaTag = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
+    // Inject or update Content-Security-Policy meta tag (+ the host-view meta tag)
+    const cspMetaTag = `<meta http-equiv="Content-Security-Policy" content="${csp}">${hostMeta}`;
     if (/<meta http-equiv="Content-Security-Policy"[^>]*>/i.test(html)) {
       html = html.replace(
         /<meta http-equiv="Content-Security-Policy"[^>]*>/i,
@@ -64,7 +73,7 @@ export function buildWebviewHtml(options: BuildWebviewHtmlOptions): string {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="${csp}">
+  <meta http-equiv="Content-Security-Policy" content="${csp}">${hostMeta}
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Token Optimizer</title>
   <style nonce="${nonce}">

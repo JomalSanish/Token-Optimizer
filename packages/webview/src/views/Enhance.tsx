@@ -1,3 +1,10 @@
+/**
+ * Enhance tab: describe the project (or pre-fill it from a workspace scan via enhance/prefill),
+ * run Enhance, review/edit phases, history and finalize.
+ *
+ * Exports: VersionHistoryItem, Enhance
+ * Feature: token cost estimator
+ */
 import React, { useState, useEffect } from "react";
 import {
   Sparkles,
@@ -60,6 +67,8 @@ export const Enhance: React.FC<EnhanceProps> = ({
 }) => {
   const [description, setDescription] = useState("");
   const [isPreFillLoading, setIsPreFillLoading] = useState(false);
+  const [prefill, setPrefill] = useState<{ signals: string[]; error?: string } | null>(null);
+  const [noModelHint, setNoModelHint] = useState(false);
   const [showJsonViewer, setShowJsonViewer] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
 
@@ -98,6 +107,16 @@ export const Enhance: React.FC<EnhanceProps> = ({
           ...prev,
           [msg.payload.entry.version]: msg.payload.entry.profile,
         }));
+      } else if (msg.type === "enhance/prefillResult") {
+        setIsPreFillLoading(false);
+        setPrefill({ signals: msg.payload.signals });
+        const draft = msg.payload.description;
+        if (draft) {
+          setDescription((prev) => (prev.trim() ? `${prev.trimEnd()}\n\n${draft}` : draft));
+        }
+      } else if (msg.type === "enhance/prefillError") {
+        setIsPreFillLoading(false);
+        setPrefill({ signals: [], error: msg.payload.message });
       } else if (msg.type === "enhance/historyCleared") {
         setHistorySummaries([]);
         setCachedProfiles({});
@@ -120,8 +139,13 @@ export const Enhance: React.FC<EnhanceProps> = ({
 
   const handleRunEnhance = () => {
     if (!description.trim() || isStreaming) return;
-    const providerId = enhanceModel?.providerId || "anthropic";
-    const modelId = enhanceModel?.modelId || "claude-3-5-sonnet";
+    // No hard-coded fallback model: App passes the user's pick or the first usable catalog model.
+    if (!enhanceModel) {
+      setNoModelHint(true);
+      return;
+    }
+    setNoModelHint(false);
+    const { providerId, modelId } = enhanceModel;
 
     vscodeBridge.postMessage({
       version: 1,
@@ -136,16 +160,16 @@ export const Enhance: React.FC<EnhanceProps> = ({
     });
   };
 
+  // Workspace pre-fill: the host scans manifests/README (WorkspaceScanner) and answers
+  // enhance/prefillResult | enhance/prefillError (handled in the message effect above).
   const handlePreFillScan = () => {
     setIsPreFillLoading(true);
-    setTimeout(() => {
-      setIsPreFillLoading(false);
-      if (!description.trim()) {
-        setDescription(
-          "A multi-turn AI application with semantic retrieval, embedding search, prompt prefix caching, and conversational memory."
-        );
-      }
-    }, 200);
+    setPrefill(null);
+    vscodeBridge.postMessage({
+      version: 1,
+      type: "enhance/prefill",
+      payload: { operationId: `prefill-${Date.now()}` },
+    });
   };
 
   const handleFinalize = () => {
@@ -278,12 +302,12 @@ export const Enhance: React.FC<EnhanceProps> = ({
     <div className="space-y-6">
       {/* Input Section */}
       <div className="glass-panel rounded-xl p-5 border border-slate-800 bg-slate-900/40">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between flex-wrap gap-y-2 mb-3">
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-indigo-400" />
             <h2 className="text-sm font-semibold text-slate-100">Describe Your AI Feature</h2>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={handlePreFillScan}
               disabled={isPreFillLoading || isStreaming}
@@ -293,7 +317,7 @@ export const Enhance: React.FC<EnhanceProps> = ({
               <FolderSearch className="w-3.5 h-3.5" />
               <span>{isPreFillLoading ? "Scanning..." : "Scan Workspace"}</span>
             </button>
-            <span className="text-[11px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+            <span className="hidden sm:inline text-[11px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
               Ctrl+Enter to Run • Enter for newline
             </span>
           </div>
@@ -308,7 +332,21 @@ export const Enhance: React.FC<EnhanceProps> = ({
           className="w-full bg-slate-950/90 border border-slate-800 rounded-lg p-3.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors resize-none font-sans"
         />
 
-        <div className="mt-3 flex justify-between items-center">
+        {prefill && (
+          <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]" data-testid="prefill-signals">
+            {prefill.error ? (
+              <span className="text-amber-400">Workspace scan: {prefill.error}</span>
+            ) : (
+              prefill.signals.map((s) => (
+                <span key={s} className="bg-slate-900 text-slate-400 border border-slate-800 px-2 py-0.5 rounded">
+                  {s}
+                </span>
+              ))
+            )}
+          </div>
+        )}
+
+        <div className="mt-3 flex justify-between flex-wrap gap-y-2 items-center">
           <div className="flex items-center gap-3 text-xs text-slate-400">
             {costUsd > 0 && (
               <span className="bg-emerald-950/60 text-emerald-400 border border-emerald-800/50 px-2 py-0.5 rounded font-mono font-medium">
@@ -318,6 +356,11 @@ export const Enhance: React.FC<EnhanceProps> = ({
             {enhanceModel && (
               <span className="text-slate-400">
                 Model: <span className="text-slate-300 font-mono">{enhanceModel.providerId} / {enhanceModel.modelId}</span>
+              </span>
+            )}
+            {!enhanceModel && (
+              <span className={noModelHint ? "text-amber-400" : "text-slate-400"}>
+                No model selected: add an API key and pick an Enhance model in Settings.
               </span>
             )}
           </div>
@@ -344,7 +387,7 @@ export const Enhance: React.FC<EnhanceProps> = ({
       {/* Narrative Streaming Panel */}
       {(narrative || isStreaming) && (
         <div className="glass-panel rounded-xl p-5 border border-slate-800 bg-slate-900/40">
-          <div className="flex items-center justify-between mb-3 text-slate-300 font-semibold text-sm">
+          <div className="flex items-center justify-between flex-wrap gap-y-2 mb-3 text-slate-300 font-semibold text-sm">
             <div className="flex items-center gap-2">
               <Terminal className="w-4 h-4 text-indigo-400" />
               <span>Architecture Narrative</span>
@@ -367,7 +410,7 @@ export const Enhance: React.FC<EnhanceProps> = ({
       {/* Extracted Profile and Editable Phases */}
       {profile && (
         <div className="glass-panel rounded-xl p-5 border border-slate-800 bg-slate-900/40 space-y-5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-y-2">
             <div className="flex items-center gap-2.5">
               <CheckCircle2
                 className={`w-5 h-5 ${
@@ -453,7 +496,7 @@ export const Enhance: React.FC<EnhanceProps> = ({
 
           {/* Editable Pipeline Phases Table (T133, FR-052) */}
           <div className="border border-slate-800 rounded-lg overflow-hidden bg-slate-950/70">
-            <div className="bg-slate-900/80 px-4 py-2.5 border-b border-slate-800 flex items-center justify-between">
+            <div className="bg-slate-900/80 px-4 py-2.5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-y-2">
               <div>
                 <span className="text-xs font-semibold text-slate-200 block">
                   Pipeline Phases (Confirmed: {profile.phases.filter((p) => p.confirmed).length}/{profile.phases.length})
@@ -591,7 +634,7 @@ export const Enhance: React.FC<EnhanceProps> = ({
       {/* Version History & Two-Version Diff (T063, History Hydration) */}
       {showHistory && (
         <div className="glass-panel rounded-xl p-5 border border-slate-800 bg-slate-900/50 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-y-2">
             <div className="flex items-center gap-2">
               <GitCompare className="w-4 h-4 text-indigo-400" />
               <h3 className="text-sm font-semibold text-slate-100">Version History & Diff</h3>

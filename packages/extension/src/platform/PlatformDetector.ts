@@ -1,3 +1,9 @@
+/**
+ * Detects the host IDE/agent platform from app name, URI scheme and marker files.
+ *
+ * Exports: PlatformDetectionEnv, PlatformDetector
+ * Feature: settings / API keys
+ */
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { CatalogSnapshot, Platform } from "@token-optimizer/core";

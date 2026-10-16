@@ -1,3 +1,9 @@
+/**
+ * Tests: BundledSnapshotLoader Unit Tests (T033, Principle X).
+ *
+ * Exports: none (test suite)
+ * Feature: catalog
+ */
 import { describe, it, expect } from "vitest";
 import { BundledSnapshotLoader } from "../../src/index.js";
 

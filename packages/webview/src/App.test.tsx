@@ -1,3 +1,9 @@
+/**
+ * Tests: Webview Shell (T004, T015, Finding 4, Principle I & II).
+ *
+ * Exports: none (test suite)
+ * Feature: shared protocol / webview shell
+ */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import React from "react";
 import { render, screen, fireEvent, act } from "@testing-library/react";
@@ -31,7 +37,7 @@ describe("Webview Shell (T004, T015, Finding 4, Principle I & II)", () => {
     expect(screen.getByText("No Estimation Computed Yet")).toBeDefined();
 
     // Switch to Optimize tab
-    fireEvent.click(screen.getByRole("button", { name: /Optimize/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Optimize$/ }));
     expect(screen.getByText("Strategy Selection")).toBeDefined();
     expect(
       screen.getByText(/No strategies discovered yet. Connect catalog/)
@@ -39,9 +45,14 @@ describe("Webview Shell (T004, T015, Finding 4, Principle I & II)", () => {
 
     // Switch to Implement tab
     fireEvent.click(screen.getByRole("button", { name: /Implement/ }));
-    expect(screen.getByText("Implementation Route")).toBeDefined();
-    expect(screen.getByText("Install Route")).toBeDefined();
-    expect(screen.getByText("IDE Agent Route")).toBeDefined();
+    // v2: install / IDE-agent routes are cut scope; the Implement tab is a Phase 0 stub.
+    expect(screen.getByRole("heading", { name: /Implement/ })).toBeDefined();
+
+    // New v2 tabs render their stub views
+    fireEvent.click(screen.getByRole("button", { name: /Prompt Optimizer/ }));
+    expect(screen.getByRole("heading", { name: /Prompt Optimizer/ })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: /^Router$/ }));
+    expect(screen.getByRole("heading", { name: /Model Router/ })).toBeDefined();
 
     // Switch to Settings tab
     fireEvent.click(screen.getByRole("button", { name: /Settings/ }));

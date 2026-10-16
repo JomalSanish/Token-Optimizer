@@ -1,3 +1,9 @@
+/**
+ * Anthropic Messages API adapter (key validation, model list, completion with retry).
+ *
+ * Exports: AnthropicAdapter
+ * Feature: providers
+ */
 import type {
   ProviderAdapter,
   KeyValidationResult,

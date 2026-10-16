@@ -1,3 +1,9 @@
+/**
+ * Migration 002: normalizes model documents (canonical ids, context window, tier, tokenizer).
+ *
+ * Exports: up
+ * Feature: catalog
+ */
 import type { Db } from "mongodb";
 
 /**

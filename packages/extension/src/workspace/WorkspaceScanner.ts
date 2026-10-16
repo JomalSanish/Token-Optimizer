@@ -1,3 +1,9 @@
+/**
+ * Scans workspace files for project signals (languages, frameworks, LLM SDKs).
+ *
+ * Exports: ScannedProjectInfo, WorkspaceScanner
+ * Feature: token cost estimator
+ */
 import * as vscode from "vscode";
 
 export interface ScannedProjectInfo {

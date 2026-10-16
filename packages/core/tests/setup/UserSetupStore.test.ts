@@ -1,3 +1,9 @@
+/**
+ * Tests: UserSetupStore (T131, FR-050, Principle I).
+ *
+ * Exports: none (test suite)
+ * Feature: settings / API keys
+ */
 import { describe, it, expect } from "vitest";
 import {
   UserSetupStore,

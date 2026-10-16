@@ -1,3 +1,9 @@
+/**
+ * Tests: Estimation Property Tests (T076, FR-019, Principle IV, M2).
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { estimate } from "../../src/estimation/EstimationEngine.js";

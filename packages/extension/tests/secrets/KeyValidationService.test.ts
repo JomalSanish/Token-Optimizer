@@ -1,3 +1,9 @@
+/**
+ * Tests: KeyValidationService Unit Tests (T050, T055, FR-003, FR-005).
+ *
+ * Exports: none (test suite)
+ * Feature: settings / API keys
+ */
 import { describe, it, expect, vi } from "vitest";
 import type * as vscode from "vscode";
 import { KeyValidationService } from "../../src/secrets/KeyValidationService.js";

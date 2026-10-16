@@ -1,3 +1,9 @@
+/**
+ * Tests: Catalog Tools Integration Tests (T028, T035, T036, T037, Principle VII, VIII).
+ *
+ * Exports: none (test suite)
+ * Feature: catalog
+ */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { MongoClient, type Db } from "mongodb";
@@ -8,6 +14,8 @@ import {
   seedCatalog,
   validateCatalog,
   publishCatalog,
+  loadSeedDir,
+  findFutureDatedPricing,
 } from "../src/index.js";
 import { CatalogSnapshotSchema } from "@token-optimizer/core";
 
@@ -21,26 +29,29 @@ describe("Catalog Tools Integration Tests (T028, T035, T036, T037, Principle VII
     client = new MongoClient(mongod.getUri());
     await client.connect();
     db = client.db("test_tools");
-  }, 60000);
+  }, 180000);
 
   afterAll(async () => {
     if (client) await client.close();
     if (mongod) await mongod.stop();
   });
 
-  it("T028: runMigrations runs all 8 migrations and is idempotent", async () => {
+  it("T028: runMigrations runs all 11 migrations, records a ledger, and is idempotent", async () => {
     const migrationsDir = path.resolve(__dirname, "../../catalog-api/migrations");
     const executed = await runMigrations(db, { migrationsDir });
-    expect(executed.length).toBe(8);
+    expect(executed.length).toBe(11);
 
-    // Re-running is idempotent no-op / succeeds cleanly
+    // Ledger: a second run skips everything already applied
     const reRun = await runMigrations(db, { migrationsDir });
-    expect(reRun.length).toBe(8);
+    expect(reRun.length).toBe(0);
+
+    // Forced re-run is still an idempotent success
+    const forced = await runMigrations(db, { migrationsDir, force: true });
+    expect(forced.length).toBe(11);
   });
 
   it("T035: seedCatalog succeeds on valid data and enforces Principle VII auditability", async () => {
-    const seedPath = path.resolve(__dirname, "../data/seed-catalog.json");
-    const rawSeed = JSON.parse(await fs.readFile(seedPath, "utf-8"));
+    const rawSeed = loadSeedDir();
 
     const result = await seedCatalog(db, rawSeed);
     expect(result.modelsCount).toBeGreaterThan(0);
@@ -106,6 +117,34 @@ describe("Catalog Tools Integration Tests (T028, T035, T036, T037, Principle VII
     await db.collection("providers").deleteOne({ id: "corrupted-provider" });
   });
 
+  it("pricing must be effective at seed/publish time; seed rows replace a model's stale rows", async () => {
+    const row = (effectiveFrom: string) => ({
+      modelId: "gpt-4o",
+      currency: "USD",
+      inputPerMTok: 2.5,
+      outputPerMTok: 10.0,
+      effectiveFrom,
+      sourceUrl: "https://openai.com/pricing",
+      verifiedAt: "2026-10-01T00:00:00Z",
+    });
+    expect(findFutureDatedPricing([row("2026-10-01T00:00:00Z")], "2026-10-02T00:00:00Z")).toEqual([]);
+    expect(findFutureDatedPricing([row("2026-10-03T00:00:00Z")], "2026-10-02T00:00:00Z")).toEqual([
+      "gpt-4o (effectiveFrom 2026-10-03T00:00:00Z)",
+    ]);
+
+    // Seed rejects a future-dated row.
+    await expect(seedCatalog(db, { pricing: [row("2999-01-01T00:00:00Z")] })).rejects.toThrow(
+      /later than the seed time/
+    );
+
+    // A stale stored row (not in the seed) blocks publish, and re-seeding removes it.
+    const pricing = db.collection("pricing");
+    await pricing.insertOne(row("2999-01-01T00:00:00Z"));
+    await expect(publishCatalog(db)).rejects.toThrow(/Refusing to publish/);
+    await seedCatalog(db, { pricing: loadSeedDir().pricing });
+    expect(await pricing.countDocuments({ modelId: "gpt-4o", effectiveFrom: "2999-01-01T00:00:00Z" })).toBe(0);
+  });
+
   it("T037: publishCatalog increments version and writes validated snapshot", async () => {
     const tempSnapshotPath = path.resolve(__dirname, "../dist/test-snapshot.json");
     const { version, snapshot } = await publishCatalog(db, {
@@ -136,15 +175,15 @@ describe("Catalog Tools Integration Tests (T028, T035, T036, T037, Principle VII
     expect(reportRes.draftCount).toBeGreaterThan(0);
     const reportContent = await fs.readFile(reportRes.reportPath, "utf-8");
     expect(reportContent).toContain("Maintainer Review Checklist (Principle VIII)");
-    expect(reportContent).toContain("prompt-prefix-caching");
+    expect(reportContent).toContain("cache-prefix-ordering");
 
     // 2. Reject approval by automated bot identity
     await expect(
-      approveStrategy(db, "prompt-prefix-caching", "github-actions[bot]")
+      approveStrategy(db, "cache-prefix-ordering", "github-actions[bot]")
     ).rejects.toThrow(/Principle VIII violation.*recognized bot/);
 
     await expect(
-      approveStrategy(db, "prompt-prefix-caching", "   ")
+      approveStrategy(db, "cache-prefix-ordering", "   ")
     ).rejects.toThrow(/Principle VIII violation.*Reviewer name is required/);
 
     // 3. Reject direct seeding of approved strategies
@@ -167,7 +206,7 @@ describe("Catalog Tools Integration Tests (T028, T035, T036, T037, Principle VII
     // 4. Successful approval by a named human maintainer
     const approved = await approveStrategy(
       db,
-      "prompt-prefix-caching",
+      "cache-prefix-ordering",
       "Alice (Lead Maintainer)"
     );
 

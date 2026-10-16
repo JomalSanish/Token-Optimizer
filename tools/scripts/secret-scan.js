@@ -1,3 +1,9 @@
+/**
+ * Repository secret scanner (keys, tokens, Mongo URIs) used by `pnpm secret-scan` and CI.
+ *
+ * Exports: SECRET_PATTERNS, scanFile, scanDirectory, scanRepo
+ * Feature: tooling
+ */
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -49,6 +55,10 @@ const IGNORE_DIRS = new Set([
   ".git",
   ".pnpm-store",
   "coverage",
+  ".venv",
+  "__pycache__",
+  ".pytest_cache",
+  ".ruff_cache",
 ]);
 
 // Git-ignored local environment files (contain real local dev credentials; never committed)
@@ -98,7 +108,7 @@ export function scanDirectory(dir, violations = []) {
     } else if (entry.isFile()) {
       // scan source, config, and env templates (e.g., .env.example)
       if (
-        /\.(ts|tsx|js|jsx|json|yaml|yml|md|html)$/i.test(entry.name) ||
+        /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|py|toml|txt|json|yaml|yml|md|html)$/i.test(entry.name) ||
         entry.name.startsWith(".env")
       ) {
         scanFile(fullPath, violations);
@@ -111,7 +121,7 @@ export function scanDirectory(dir, violations = []) {
 
 export function scanRepo(rootDir = process.cwd()) {
   const violations = [];
-  const dirsToScan = ["packages", "tools", ".github", "docs"];
+  const dirsToScan = ["packages", "tools", ".github", "docs", "examples"];
 
   for (const subDir of dirsToScan) {
     const fullDir = path.join(rootDir, subDir);

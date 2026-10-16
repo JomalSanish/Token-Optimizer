@@ -1,3 +1,10 @@
+/**
+ * HTTP client for the Catalog API with ETag caching and offline fallback to cached data.
+ *
+ * Exports: CatalogStorage, MemoryCatalogStorage, CatalogClientOptions, FetchCatalogResult,
+ *   CatalogClient
+ * Feature: catalog
+ */
 import {
   CatalogSnapshotSchema,
   type CatalogSnapshot,
@@ -114,7 +121,11 @@ export class CatalogClient {
         };
       }
 
-      throw new Error(`Catalog API responded with status ${response.status}`);
+      const endpoint = new URL(url);
+      // Keep diagnostics useful without logging query parameters from custom endpoints.
+      throw new Error(
+        `Catalog API request to ${endpoint.origin}${endpoint.pathname} responded with status ${response.status}`
+      );
     } catch (err) {
       // Network failure / connection refused
       if (cachedSnapshot) {

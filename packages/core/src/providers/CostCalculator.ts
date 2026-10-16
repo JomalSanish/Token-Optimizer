@@ -1,3 +1,9 @@
+/**
+ * Converts token counts and catalog pricing into USD cost ranges.
+ *
+ * Exports: CostCalculator
+ * Feature: providers
+ */
 import type { Pricing, CostRange } from "../protocol/types.js";
 
 export class CostCalculator {

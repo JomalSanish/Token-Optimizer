@@ -1,3 +1,9 @@
+/**
+ * Tests: buildWebviewHtml and CSP (Finding 5, 6, Principle II).
+ *
+ * Exports: none (test suite)
+ * Feature: shared protocol / webview shell
+ */
 import { describe, it, expect } from "vitest";
 import {
   buildWebviewCsp,
@@ -82,4 +88,13 @@ describe("buildWebviewHtml and CSP (Finding 5, 6, Principle II)", () => {
     expect(html).toContain(`nonce="${testNonce}"`);
     expect(html).toContain('<meta http-equiv="Content-Security-Policy"');
   });
+
+  it("tells the page whether it runs in the sidebar or the editor panel", () => {
+    const tpl = "<html><head></head><body><div id=\"root\"></div></body></html>";
+    const panel = buildWebviewHtml({ nonce: "n1", cspSource: "vscode-resource:", template: tpl, hostView: "panel" });
+    expect(panel).toContain('<meta name="token-optimizer-host" content="panel">');
+    const plain = buildWebviewHtml({ nonce: "n1", cspSource: "vscode-resource:", template: tpl });
+    expect(plain).not.toContain("token-optimizer-host");
+  });
 });
+

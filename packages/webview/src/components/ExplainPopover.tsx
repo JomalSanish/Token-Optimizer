@@ -1,3 +1,9 @@
+/**
+ * Popover rendering an estimation explain tree (formula, inputs, result).
+ *
+ * Exports: ExplainPopoverProps, ExplainPopover
+ * Feature: token cost estimator
+ */
 import React, { useEffect, useState } from "react";
 import { HelpCircle, X, ChevronDown, ChevronRight, Calculator } from "lucide-react";
 import type { ExplainNode } from "@token-optimizer/core";

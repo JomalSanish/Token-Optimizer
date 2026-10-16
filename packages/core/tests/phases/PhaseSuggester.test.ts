@@ -1,3 +1,9 @@
+/**
+ * Tests: PhaseSuggester.
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect } from "vitest";
 import { suggestPhases } from "../../src/phases/PhaseSuggester.js";
 import type { Phase } from "../../src/protocol/types.js";

@@ -1,3 +1,9 @@
+/**
+ * Tests: Catalog API Health Check (T005, FR-043, Finding 20).
+ *
+ * Exports: none (test suite)
+ * Feature: catalog
+ */
 import { describe, it, expect } from "vitest";
 import { buildServer } from "../src/server.js";
 

@@ -1,3 +1,9 @@
+/**
+ * Login/API-key onboarding view (currently unused by App).
+ *
+ * Exports: LoginProps, Login
+ * Feature: settings / API keys
+ */
 import React, { useState } from "react";
 import { KeyRound, ShieldCheck, CheckCircle2, ArrowRight, Cpu } from "lucide-react";
 import { vscodeBridge } from "../protocol/vscode";

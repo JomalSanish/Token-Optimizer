@@ -1,3 +1,9 @@
+/**
+ * Tests: Estimation Golden File Tests (T075, T077, FR-019, Principle IV, C1, M1).
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect } from "vitest";
 import { estimate } from "../../src/estimation/EstimationEngine.js";
 import { ProjectProfileSchema } from "../../src/profile/schema.js";

@@ -1,3 +1,9 @@
+/**
+ * Tests: CatalogClient Unit Tests (T039, FR-043, FR-045, Principle X).
+ *
+ * Exports: none (test suite)
+ * Feature: catalog
+ */
 import { describe, it, expect, vi } from "vitest";
 import {
   CatalogClient,

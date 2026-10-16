@@ -1,3 +1,10 @@
+/**
+ * Pure, deterministic cost estimation engine: profile + catalog -> per-phase tokens and cost
+ * ranges.
+ *
+ * Exports: estimate, findActivePricing, pricingReferenceTime, EstimationEngine
+ * Feature: token cost estimator
+ */
 import type {
   CostRange,
   EstimationResult,
@@ -24,7 +31,18 @@ function round4(val: number): number {
  * (H12: Compares timestamps via Date.parse; does not fall back to future-dated prices;
  * uses catalog.publishedAt as referenceTime for determinism per Principle IV).
  */
-function findActivePricing(
+/**
+ * The single pricing reference time shared by the estimator, the prompt optimizer and Enhance:
+ * the catalog's `publishedAt` (deterministic per catalog version), else `fallback`, else now.
+ */
+export function pricingReferenceTime(
+  catalog: { publishedAt?: string } | null | undefined,
+  fallback?: string
+): string {
+  return catalog?.publishedAt ?? fallback ?? new Date().toISOString();
+}
+
+export function findActivePricing(
   modelId: string,
   catalogPricing: Pricing[],
   referenceTime: string
@@ -147,7 +165,7 @@ function computePhase(
       retries: number,
       volMult: number,
       tpc: number
-    ): number => {
+    ): { input: number; output: number } => {
       const vol =
         phase.track === "build"
           ? calls * (1 + retries) * iterations
@@ -162,34 +180,40 @@ function computePhase(
       const costCached = canCache ? (cachedIn * vol * cachedPrice) / 1_000_000 : 0;
       const costOut = (rawOut * vol * outputPrice) / 1_000_000;
 
-      return round4(costIn + costCached + costOut);
+      return { input: costIn + costCached, output: costOut };
     };
+    const total = (c: { input: number; output: number }) => round4(c.input + c.output);
 
-    const lowCost = calcCost(
+    const lowCostSplit = calcCost(
       params.calls.low,
       params.retries.low,
       params.volumeMultiplier.low,
       params.tokensPerCall.low
     );
-    const expCost = calcCost(
+    const expCostSplit = calcCost(
       params.calls.expected,
       params.retries.expected,
       params.volumeMultiplier.expected,
       params.tokensPerCall.expected
     );
-    const highCost = calcCost(
+    const highCostSplit = calcCost(
       params.calls.high,
       params.retries.high,
       params.volumeMultiplier.high,
       params.tokensPerCall.high
     );
 
+    const lowCost = total(lowCostSplit);
+    const expCost = total(expCostSplit);
+    const highCost = total(highCostSplit);
     costByModel[model.id] = {
       low: lowCost,
       expected: expCost,
       high: highCost,
       currency: "USD",
       pricingVerifiedAt: pricing?.verifiedAt,
+      expectedInput: round4(expCostSplit.input),
+      expectedOutput: round4(expCostSplit.output),
     };
 
     // H5: Build strictly additive Explain tree where children add up to total phase cost
@@ -294,11 +318,10 @@ export function estimate(
 ): EstimationResult {
   const resolvedPhases = PhaseResolver.resolve(profile.phases, catalog.phases);
 
-  const referenceTime =
-    catalog.publishedAt ??
-    profile.finalizedAt ??
-    profile.createdAt ??
-    "2026-10-09T00:00:00.000Z";
+  const referenceTime = pricingReferenceTime(
+    catalog,
+    profile.finalizedAt ?? profile.createdAt ?? "2026-10-09T00:00:00.000Z"
+  );
 
   // H9 & H2: Active models with verified active pricing; exclude unpriced models
   const activeModels = (catalog.models as Model[]).filter((m: Model) => {
@@ -353,6 +376,8 @@ export function estimate(
       let sumLow = 0;
       let sumExp = 0;
       let sumHigh = 0;
+      let sumIn = 0;
+      let sumOut = 0;
       let verifiedAt: string | undefined = undefined;
 
       for (const p of phases) {
@@ -361,6 +386,8 @@ export function estimate(
           sumLow += cost.low;
           sumExp += cost.expected;
           sumHigh += cost.high;
+          sumIn += cost.expectedInput ?? 0;
+          sumOut += cost.expectedOutput ?? 0;
           if (!verifiedAt && cost.pricingVerifiedAt) {
             verifiedAt = cost.pricingVerifiedAt;
           }
@@ -373,6 +400,8 @@ export function estimate(
         high: round4(sumHigh),
         currency: "USD",
         pricingVerifiedAt: verifiedAt,
+        expectedInput: round4(sumIn),
+        expectedOutput: round4(sumOut),
       };
     }
 

@@ -1,3 +1,9 @@
+/**
+ * Tests: CostCalculator Unit Tests (T062, FR-012).
+ *
+ * Exports: none (test suite)
+ * Feature: providers
+ */
 import { describe, it, expect } from "vitest";
 import { CostCalculator } from "../../src/providers/CostCalculator.js";
 import type { Pricing } from "../../src/protocol/types.js";

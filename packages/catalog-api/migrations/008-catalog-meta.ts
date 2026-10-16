@@ -1,3 +1,9 @@
+/**
+ * Migration 008: creates the single catalog_meta document used for versioning and ETags.
+ *
+ * Exports: up
+ * Feature: catalog
+ */
 import type { Db } from "mongodb";
 
 /**

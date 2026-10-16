@@ -1,3 +1,9 @@
+/**
+ * Tests: Settings View Unit Tests (T053, US1, FR-001-FR-007).
+ *
+ * Exports: none (test suite)
+ * Feature: settings / API keys
+ */
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";

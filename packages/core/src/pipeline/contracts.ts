@@ -1,3 +1,12 @@
+/**
+ * Interfaces of the estimation/optimization pipeline stages.
+ *
+ * Exports: CatalogContext, ProviderUsage, ProviderCompletionResult, HostModelAdapter,
+ *   EnhanceStageInput, EnhanceStageOutput, EstimateStageInput, OptimizeStageInput,
+ *   OptimizeStageOutput, InstallPlan, IdeAgentRun, ImplementStageOutput, ImplementStageInput,
+ *   ApplicabilityContext, EnhanceStage, EstimateStage, OptimizeStage, ImplementStage
+ * Feature: token cost estimator
+ */
 import type {
   ProjectProfile,
   EstimationResult,

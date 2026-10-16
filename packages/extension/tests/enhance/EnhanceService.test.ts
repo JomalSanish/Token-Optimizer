@@ -1,3 +1,9 @@
+/**
+ * Tests: EnhanceService Unit Tests (T059, T064, FR-010-FR-013).
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type * as vscode from "vscode";
 import { EnhanceService } from "../../src/enhance/EnhanceService.js";

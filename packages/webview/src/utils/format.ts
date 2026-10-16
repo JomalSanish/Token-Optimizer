@@ -1,6 +1,9 @@
 /**
  * Adaptive currency formatting for LLM token costs.
  * Avoids displaying $0.00 for sub-cent costs (Finding 13).
+ *
+ * Exports: formatCost
+ * Feature: token cost estimator
  */
 export function formatCost(amount: number): string {
   if (amount === 0) return "$0.00";

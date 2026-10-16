@@ -1,3 +1,9 @@
+/**
+ * ESLint rule: forbid passing raw API keys/secrets to postMessage, send or loggers.
+ *
+ * Exports: default
+ * Feature: tooling
+ */
 export default {
   meta: {
     type: "problem",

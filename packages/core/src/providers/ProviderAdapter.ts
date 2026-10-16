@@ -1,3 +1,10 @@
+/**
+ * ProviderAdapter interface and shared result types; adapters never receive raw keys directly.
+ *
+ * Exports: KeyValidationResult, TokenCountResult, ChatMessage, CompletionOptions,
+ *   CompletionResult, ProviderAdapter
+ * Feature: providers
+ */
 export interface KeyValidationResult {
   valid: boolean;
   reason?: "invalid" | "unreachable" | "rate-limited";
@@ -18,6 +25,8 @@ export interface ChatMessage {
 export interface CompletionOptions {
   model?: string;
   schema?: unknown;
+  /** Ask for a JSON object response (OpenAI-style response_format json_object) where supported. */
+  responseFormat?: "json_object";
   maxTokens?: number;
   temperature?: number;
   signal?: AbortSignal;

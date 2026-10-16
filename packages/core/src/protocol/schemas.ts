@@ -1,3 +1,13 @@
+/**
+ * Webview <-> extension-host message protocol and catalog entity schemas (Zod). FROZEN CONTRACT:
+ * Phase 1 tracks implement against these and must not edit them; changes go through the integrator.
+ *
+ * Exports: catalog entities (ProviderSchema, ModelSchema, StrategySchema incl. technique fields,
+ *   RouterPresetSchema, RouterConfigSchema, ...), feature payloads (PromptMessageSchema,
+ *   ImplementEditProposalSchema, RouteDecisionSchema, FeatureErrorPayloadSchema), every message
+ *   envelope, and the HostToWebviewMsgSchema / WebviewToHostMsgSchema unions.
+ * Feature: shared protocol (all features)
+ */
 import { z } from "zod";
 import { ProjectProfileSchema } from "../profile/schema.js";
 
@@ -191,6 +201,36 @@ export const SavingsRangeSchema = z
   })
   .strict();
 
+/**
+ * How a technique runs inside the prompt optimizer (TS core and Python `ai_optimizer`).
+ * `rule` techniques are deterministic and must give byte-identical results in TS and Python
+ * (golden fixtures in packages/fixtures/optimizer). `llm` techniques call the user's model with
+ * the catalog prompt template `promptTemplateId`. Techniques run in ascending `order`.
+ * `params` carries rule data (e.g. filler phrase list, output cap) so both runtimes share it.
+ */
+export const TechniqueOptimizerSchema = z
+  .object({
+    mode: z.enum(["rule", "llm"]),
+    ruleId: z.string().min(1).max(100).optional(),
+    promptTemplateId: z.string().min(1).max(100).optional(),
+    order: z.number().int().nonnegative(),
+    affects: z.enum(["input", "output", "both"]),
+    params: z.record(z.unknown()).optional(),
+  })
+  .strict()
+  .refine((o) => (o.mode === "rule" ? !!o.ruleId : !!o.promptTemplateId), {
+    message: "rule techniques need ruleId; llm techniques need promptTemplateId",
+  });
+
+/** How the Implement flow wires a technique into user Python code (symbol in `ai_optimizer`). */
+export const TechniqueImplementationSchema = z
+  .object({
+    language: z.literal("python"),
+    symbol: z.string().min(1).max(100),
+    integrations: z.array(z.enum(["agent-middleware", "invoke-wrap"])).min(1),
+  })
+  .strict();
+
 export const StrategySchema = z
   .object({
     id: StrategyIdSchema,
@@ -205,7 +245,8 @@ export const StrategySchema = z
     conflicts: z.array(StrategyIdSchema).optional(),
     requires: z.array(StrategyIdSchema).optional(),
     preview: z.record(z.unknown()).optional(),
-    implementation: z.record(z.unknown()).optional(),
+    optimizer: TechniqueOptimizerSchema.optional(),
+    implementation: TechniqueImplementationSchema.optional(),
     reviewStatus: z.enum(["draft", "pending", "approved"]),
     reviewedBy: z.string().max(100).optional(),
     reviewedAt: z.string().optional(),
@@ -270,10 +311,178 @@ export const PromptTemplateSchema = z
   .object({
     id: z.string().min(1).max(100),
     version: z.number().int().positive(),
-    purpose: z.enum(["enhance", "profile-extract", "apply-edit", "preview", "handoff"]),
+    purpose: z.enum([
+      "enhance",
+      "profile-extract",
+      "apply-edit",
+      "preview",
+      "handoff",
+      "compress",
+    ]),
     template: z.string(),
     outputSchemaRef: z.string().nullable().optional(),
     active: z.boolean(),
+  })
+  .strict();
+
+// ─── Model router (rule-based tiers) ────────────────────────────────────────
+
+export const RouterTierSchema = z.enum(["economy", "standard", "advanced"]);
+
+export const RouterCandidateSchema = z
+  .object({
+    modelId: ModelIdSchema,
+    providerId: ProviderIdSchema,
+  })
+  .strict();
+
+/**
+ * Deterministic routing rules, evaluated identically by TS `RouterRules` and Python `router.route`
+ * (golden fixtures in packages/fixtures/router):
+ *   1. any `advancedKeywords` entry found (case-insensitive, whole word) -> "advanced"
+ *   2. else if total chars <= `maxCharsForEconomy` and not needsTools -> "economy"
+ *   3. else -> `defaultTier`
+ *   4. needsTools raises the result to at least `needsToolsMinTier`
+ * The routed model is the first candidate of the chosen tier; an empty tier falls back upward
+ * (economy -> standard -> advanced), then downward.
+ */
+export const RouterRulesSchema = z
+  .object({
+    maxCharsForEconomy: z.number().int().nonnegative(),
+    advancedKeywords: z.array(z.string().min(1).max(100)),
+    needsToolsMinTier: RouterTierSchema,
+    defaultTier: RouterTierSchema,
+  })
+  .strict();
+
+export const RouterConfigSchema = z
+  .object({
+    presetId: z.string().min(1).max(100).optional(),
+    tiers: z
+      .object({
+        economy: z.array(RouterCandidateSchema),
+        standard: z.array(RouterCandidateSchema),
+        advanced: z.array(RouterCandidateSchema),
+      })
+      .strict(),
+    rules: RouterRulesSchema,
+  })
+  .strict();
+
+/** Catalog collection `router_presets`. */
+export const RouterPresetSchema = z
+  .object({
+    id: z.string().min(1).max(100),
+    label: z.string().min(1).max(200),
+    description: z.string().max(1000).optional(),
+    isDefault: z.boolean(),
+    version: z.number().int().positive(),
+    tiers: RouterConfigSchema.shape.tiers,
+    rules: RouterRulesSchema,
+  })
+  .strict();
+
+export const RouteDecisionSchema = z
+  .object({
+    model: ModelIdSchema,
+    provider: ProviderIdSchema,
+    tier: RouterTierSchema,
+    reason: z.string().max(500),
+  })
+  .strict();
+
+// ─── Prompt optimizer ───────────────────────────────────────────────────────
+
+export const PromptMessageSchema = z
+  .object({
+    role: z.enum(["system", "user", "assistant"]),
+    content: z.string().max(200000),
+  })
+  .strict();
+
+/** Request parameters a technique may set (e.g. `max-output-cap`). Snake case mirrors Python. */
+export const PromptParamsSchema = z
+  .object({
+    max_tokens: z.number().int().positive().optional(),
+  })
+  .strict();
+
+export const PromptOptStepSchema = z
+  .object({
+    techniqueId: StrategyIdSchema,
+    mode: z.enum(["rule", "llm"]),
+    applied: z.boolean(),
+    messagesAfter: z.array(PromptMessageSchema),
+    paramsAfter: PromptParamsSchema,
+    inputTokensBefore: z.number().int().nonnegative(),
+    inputTokensAfter: z.number().int().nonnegative(),
+    note: z.string().max(500).optional(),
+  })
+  .strict();
+
+export const PromptOptCostSchema = z
+  .object({
+    providerId: ProviderIdSchema,
+    modelId: ModelIdSchema,
+    inputPerMTok: z.number().nonnegative(),
+    outputPerMTok: z.number().nonnegative(),
+    /** Assumed output tokens per call before/after (output-affecting techniques change "after"). */
+    outputTokensBefore: z.number().int().nonnegative(),
+    outputTokensAfter: z.number().int().nonnegative(),
+    usdPer1kCallsBefore: z.number().nonnegative(),
+    usdPer1kCallsAfter: z.number().nonnegative(),
+  })
+  .strict();
+
+// ─── Implement (Python call-site edits) ─────────────────────────────────────
+
+/** 0-based, end-exclusive range in a workspace file. */
+export const SourceRangeSchema = z
+  .object({
+    startLine: z.number().int().nonnegative(),
+    startCol: z.number().int().nonnegative(),
+    endLine: z.number().int().nonnegative(),
+    endCol: z.number().int().nonnegative(),
+  })
+  .strict();
+
+/**
+ * One per-block edit produced by core `pyEditPlanner`. `modified` replaces exactly `original`
+ * at `range`; `importsToAdd` are full import lines added once at the top of the file if missing.
+ * `fileHash` is the host-computed sha256 of the file at scan time (stale check before apply).
+ */
+export const ImplementEditProposalSchema = z
+  .object({
+    id: z.string().min(1).max(200),
+    file: WorkspaceRelativePathSchema,
+    range: SourceRangeSchema,
+    original: z.string(),
+    modified: z.string(),
+    importsToAdd: z.array(z.string().max(500)),
+    feature: z.enum(["optimizer", "router"]),
+    pattern: z.enum(["agent", "invoke", "construction"]),
+    fileHash: z.string().length(64),
+    description: z.string().max(500).optional(),
+  })
+  .strict();
+
+// ─── Feature errors ─────────────────────────────────────────────────────────
+
+/** Shared payload for every `<feature>/error` message (Phase 0 stubs reply "not-implemented"). */
+export const FeatureErrorPayloadSchema = z
+  .object({
+    operationId: z.string().optional(),
+    error: z.enum([
+      "not-implemented",
+      "invalid-request",
+      "no-model",
+      "no-key",
+      "llm-failed",
+      "io-failed",
+      "stale",
+      "internal",
+    ]),
+    message: z.string().max(500),
   })
   .strict();
 
@@ -315,6 +524,9 @@ export const CostRangeSchema = z
     high: z.number().nonnegative(),
     currency: z.literal("USD"),
     pricingVerifiedAt: z.string().optional(),
+    /** Expected-scenario cost split: input (incl. cached) and output, summing to `expected`. */
+    expectedInput: z.number().nonnegative().optional(),
+    expectedOutput: z.number().nonnegative().optional(),
   })
   .strict();
 
@@ -421,6 +633,7 @@ export const CatalogUpdatedMsgSchema = createEnvelope(
       strategies: z.array(StrategySchema),
       platforms: z.array(PlatformSchema),
       promptTemplates: z.array(PromptTemplateSchema),
+      routerPresets: z.array(RouterPresetSchema).optional(),
       isOffline: z.boolean(),
       publishedAt: z.string().optional(),
     })
@@ -681,6 +894,14 @@ export const SavingsUpdateMsgSchema = createEnvelope(
     .object({
       build: SavingsRangeSchema,
       runtime: SavingsRangeSchema,
+      /** Per-channel savings: input techniques apply to input cost, output techniques to output cost. */
+      channels: z
+        .object({
+          build: z.object({ input: SavingsRangeSchema, output: SavingsRangeSchema }).strict(),
+          runtime: z.object({ input: SavingsRangeSchema, output: SavingsRangeSchema }).strict(),
+        })
+        .strict()
+        .optional(),
       conflicts: z.array(
         z
           .object({
@@ -804,7 +1025,151 @@ export const HostCancelledMsgSchema = createEnvelope(
     .strict()
 );
 
+// ─── v2 feature messages: Host -> Webview ───────────────────────────────────
+
+export const EnhancePrefillResultMsgSchema = createEnvelope(
+  "enhance/prefillResult",
+  z
+    .object({
+      operationId: z.string().optional(),
+      /** Draft project description built from the workspace scan. */
+      description: z.string().max(20000),
+      /** Human-readable facts that drove the draft (e.g. "langchain in requirements.txt"). */
+      signals: z.array(z.string().max(300)),
+    })
+    .strict()
+);
+
+export const EnhancePrefillErrorMsgSchema = createEnvelope(
+  "enhance/prefillError",
+  FeatureErrorPayloadSchema
+);
+
+export const StrategyErrorMsgSchema = createEnvelope("strategy/error", FeatureErrorPayloadSchema);
+
+export const PromptOptResultMsgSchema = createEnvelope(
+  "promptopt/result",
+  z
+    .object({
+      operationId: z.string().optional(),
+      original: z
+        .object({
+          messages: z.array(PromptMessageSchema),
+          params: PromptParamsSchema,
+          inputTokens: z.number().int().nonnegative(),
+        })
+        .strict(),
+      optimized: z
+        .object({
+          messages: z.array(PromptMessageSchema),
+          params: PromptParamsSchema,
+          inputTokens: z.number().int().nonnegative(),
+        })
+        .strict(),
+      steps: z.array(PromptOptStepSchema),
+      tokenLabel: z.enum(["exact", "approximate"]),
+      cost: PromptOptCostSchema.optional(),
+      llmUsage: z
+        .object({
+          inputTokens: z.number().int().nonnegative(),
+          outputTokens: z.number().int().nonnegative(),
+          costUsd: z.number().nonnegative(),
+        })
+        .strict()
+        .optional(),
+    })
+    .strict()
+);
+
+export const PromptOptErrorMsgSchema = createEnvelope("promptopt/error", FeatureErrorPayloadSchema);
+
+export const ImplementExportedMsgSchema = createEnvelope(
+  "implement/exported",
+  z
+    .object({
+      operationId: z.string().optional(),
+      targetDir: WorkspaceRelativePathSchema,
+      filesWritten: z.array(WorkspaceRelativePathSchema),
+    })
+    .strict()
+);
+
+export const ImplementProposalsMsgSchema = createEnvelope(
+  "implement/proposals",
+  z
+    .object({
+      operationId: z.string().optional(),
+      filesScanned: z.number().int().nonnegative(),
+      proposals: z.array(ImplementEditProposalSchema),
+    })
+    .strict()
+);
+
+export const ImplementBlockResultMsgSchema = createEnvelope(
+  "implement/blockResult",
+  z
+    .object({
+      proposalId: z.string().min(1).max(200),
+      status: z.enum(["applied", "skipped", "stale", "failed", "diff-opened"]),
+      message: z.string().max(500).optional(),
+      /** After an apply: the new ranges of the same file's other pending blocks (rebased). */
+      rebased: z
+        .array(z.object({ proposalId: z.string().min(1).max(200), range: SourceRangeSchema }).strict())
+        .max(1000)
+        .optional(),
+    })
+    .strict()
+);
+
+export const ImplementErrorMsgSchema = createEnvelope("implement/error", FeatureErrorPayloadSchema);
+
+export const RouterPreviewResultMsgSchema = createEnvelope(
+  "router/previewResult",
+  z
+    .object({
+      operationId: z.string().optional(),
+      decision: RouteDecisionSchema,
+    })
+    .strict()
+);
+
+export const RouterConfigMsgSchema = createEnvelope(
+  "router/config",
+  z
+    .object({
+      /** Saved workspace config, or the default catalog preset when nothing is saved. */
+      config: RouterConfigSchema,
+      source: z.enum(["saved", "catalog-default"]),
+    })
+    .strict()
+);
+
+export const RouterConfigSavedMsgSchema = createEnvelope(
+  "router/configSaved",
+  z
+    .object({
+      config: RouterConfigSchema,
+      savedAt: z.string(),
+    })
+    .strict()
+);
+
+export const RouterErrorMsgSchema = createEnvelope("router/error", FeatureErrorPayloadSchema);
+
 export const HostToWebviewMsgSchema = z.discriminatedUnion("type", [
+  EnhancePrefillResultMsgSchema,
+  EnhancePrefillErrorMsgSchema,
+  StrategyErrorMsgSchema,
+  PromptOptResultMsgSchema,
+  PromptOptErrorMsgSchema,
+  ImplementExportedMsgSchema,
+  ImplementProposalsMsgSchema,
+  ImplementBlockResultMsgSchema,
+  ImplementErrorMsgSchema,
+  RouterPreviewResultMsgSchema,
+  RouterConfigMsgSchema,
+  RouterConfigSavedMsgSchema,
+  RouterErrorMsgSchema,
   CatalogUpdatedMsgSchema,
   KeySavedMsgSchema,
   KeyErrorMsgSchema,
@@ -1012,7 +1377,108 @@ export const WebviewCancelMsgSchema = createEnvelope(
     .strict()
 );
 
+// ─── v2 feature messages: Webview -> Host ───────────────────────────────────
+
+/** Ask the host to (re)send `catalog/updated` with the current snapshot and offline flag. */
+export const CatalogRequestMsgSchema = createEnvelope("catalog/request", z.object({}).strict());
+
+/** Scan the workspace and draft an Enhance description -> `enhance/prefillResult`. */
+export const EnhancePrefillMsgSchema = createEnvelope(
+  "enhance/prefill",
+  z.object({ operationId: z.string().min(1).optional() }).strict()
+);
+
+/** Evaluate technique applicability for a profile -> `strategy/selection` + `strategy/savingsUpdate`. */
+export const StrategyEvaluateMsgSchema = createEnvelope(
+  "strategy/evaluate",
+  z.object({ profileVersion: z.number().int().positive() }).strict()
+);
+
+export const PromptOptRunMsgSchema = createEnvelope(
+  "promptopt/run",
+  z
+    .object({
+      operationId: z.string().min(1).optional(),
+      messages: z.array(PromptMessageSchema).min(1),
+      params: PromptParamsSchema.optional(),
+      techniqueIds: z.array(StrategyIdSchema).min(1),
+      /** Model used for pricing and by `llm` techniques. */
+      providerId: ProviderIdSchema,
+      modelId: ModelIdSchema,
+      keySlot: z.number().int().min(0).max(10).optional(),
+      /** Assumed output tokens per call for the $ impact (default chosen by the host). */
+      expectedOutputTokens: z.number().int().nonnegative().optional(),
+    })
+    .strict()
+);
+
+export const ImplementExportMsgSchema = createEnvelope(
+  "implement/export",
+  z
+    .object({
+      operationId: z.string().min(1).optional(),
+      /** Workspace-relative package dir; default "ai_optimizer". */
+      targetDir: WorkspaceRelativePathSchema.optional(),
+      techniqueIds: z.array(StrategyIdSchema),
+      routerConfig: RouterConfigSchema.optional(),
+    })
+    .strict()
+);
+
+export const ImplementScanMsgSchema = createEnvelope(
+  "implement/scan",
+  z
+    .object({
+      operationId: z.string().min(1).optional(),
+      features: z.array(z.enum(["optimizer", "router"])).min(1),
+      techniqueIds: z.array(StrategyIdSchema),
+    })
+    .strict()
+);
+
+const ProposalRefSchema = z.object({ proposalId: z.string().min(1).max(200) }).strict();
+
+export const ImplementApplyBlockMsgSchema = createEnvelope("implement/applyBlock", ProposalRefSchema);
+export const ImplementSkipBlockMsgSchema = createEnvelope("implement/skipBlock", ProposalRefSchema);
+export const ImplementOpenDiffMsgSchema = createEnvelope("implement/openDiff", ProposalRefSchema);
+
+export const RouterPreviewMsgSchema = createEnvelope(
+  "router/preview",
+  z
+    .object({
+      operationId: z.string().min(1).optional(),
+      text: z.string().max(200000),
+      needsTools: z.boolean().optional(),
+      /** Unsaved config being edited in the UI; host uses the saved/default config when absent. */
+      config: RouterConfigSchema.optional(),
+    })
+    .strict()
+);
+
+export const RouterGetConfigMsgSchema = createEnvelope("router/getConfig", z.object({}).strict());
+
+export const RouterSaveConfigMsgSchema = createEnvelope(
+  "router/saveConfig",
+  z.object({ config: RouterConfigSchema }).strict()
+);
+
+/** Ask the host to open the UI as an editor-area panel (full width), e.g. from the narrow sidebar. */
+export const ViewOpenInEditorMsgSchema = createEnvelope("view/openInEditor", z.object({}).strict());
+
 export const WebviewToHostMsgSchema = z.discriminatedUnion("type", [
+  ViewOpenInEditorMsgSchema,
+  CatalogRequestMsgSchema,
+  EnhancePrefillMsgSchema,
+  StrategyEvaluateMsgSchema,
+  PromptOptRunMsgSchema,
+  ImplementExportMsgSchema,
+  ImplementScanMsgSchema,
+  ImplementApplyBlockMsgSchema,
+  ImplementSkipBlockMsgSchema,
+  ImplementOpenDiffMsgSchema,
+  RouterPreviewMsgSchema,
+  RouterGetConfigMsgSchema,
+  RouterSaveConfigMsgSchema,
   WebviewReadyMsgSchema,
   SaveKeyMsgSchema,
   RemoveKeyMsgSchema,

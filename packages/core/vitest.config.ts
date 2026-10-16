@@ -1,3 +1,9 @@
+/**
+ * Vitest configuration for @token-optimizer/core.
+ *
+ * Exports: default
+ * Feature: tooling (build config)
+ */
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({

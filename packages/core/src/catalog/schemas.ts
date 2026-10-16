@@ -1,3 +1,11 @@
+/**
+ * Catalog snapshot and meta schemas: the shape served by GET /v1/catalog, written by
+ * `publish --snapshot`, and bundled for offline mode. FROZEN CONTRACT for Phase 1.
+ *
+ * Exports: CatalogMetaSchema, CatalogSnapshotSchema, CatalogMeta, CatalogSnapshot, and re-exports
+ *   of the entity schemas from protocol/schemas.
+ * Feature: catalog
+ */
 import { z } from "zod";
 import {
   ISO8601Schema,
@@ -8,6 +16,7 @@ import {
   StrategySchema,
   PlatformSchema,
   PromptTemplateSchema,
+  RouterPresetSchema,
 } from "../protocol/schemas.js";
 
 export {
@@ -18,6 +27,7 @@ export {
   StrategySchema,
   PlatformSchema,
   PromptTemplateSchema,
+  RouterPresetSchema,
 };
 
 export const CatalogMetaSchema = z
@@ -40,6 +50,8 @@ export const CatalogSnapshotSchema = z
     strategies: z.array(StrategySchema),
     platforms: z.array(PlatformSchema),
     promptTemplates: z.array(PromptTemplateSchema),
+    /** Added in catalog schemaVersion 2.0 (migration 010); optional so 1.x snapshots still parse. */
+    routerPresets: z.array(RouterPresetSchema).optional(),
   })
   .strict();
 

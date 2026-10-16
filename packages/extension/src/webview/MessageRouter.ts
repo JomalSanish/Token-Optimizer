@@ -1,3 +1,11 @@
+/**
+ * Zod-validated webview <-> host message router with per-handler timeouts and log redaction.
+ * Several webviews can be attached at once (the sidebar view and the editor-area panel): every
+ * outbound message goes to all attached targets, and all of them share the same handlers.
+ *
+ * Exports: MessageHandler, PostMessageTarget, sanitizeLogText, MessageRouter
+ * Feature: shared protocol / webview shell
+ */
 import {
   WebviewToHostMsgSchema,
   HostToWebviewMsgSchema,
@@ -30,17 +38,18 @@ export class MessageRouter {
     string,
     Array<(msg: WebviewToHostMsg) => void | Promise<void>>
   >();
-  private target: PostMessageTarget | null = null;
+  private targets = new Set<PostMessageTarget>();
   private isDisposed = false;
 
   constructor(target?: PostMessageTarget) {
     if (target) {
-      this.target = target;
+      this.targets.add(target);
     }
   }
 
+  /** Attaches a webview; it receives every outbound message until detached. */
   setTarget(target: PostMessageTarget): void {
-    this.target = target;
+    this.targets.add(target);
   }
 
   register<T extends WebviewToHostMsg["type"]>(
@@ -78,7 +87,14 @@ export class MessageRouter {
         typeof rawMessage === "object" && rawMessage !== null && "type" in rawMessage
           ? String((rawMessage as { type?: unknown }).type)
           : "unknown";
-      console.debug(`[MessageRouter] Dropped invalid inbound message of type: ${rawType}`);
+      const issues = parseResult.error.issues.map((issue) => {
+        const path = issue.path.length ? issue.path.join(".") : "<root>";
+        return `${path} (${issue.code})`;
+      });
+      console.warn(
+        `[MessageRouter] Dropped invalid inbound message of type: ${rawType}; ` +
+          `validation issues: ${issues.join(", ") || "unknown"}`
+      );
       return false;
     }
 
@@ -121,10 +137,11 @@ export class MessageRouter {
   /**
    * Outbound message sender to webview.
    * Validates against HostToWebviewMsgSchema before dispatching.
-   * Returns false if target is not set or schema validation fails.
+   * Posts to every attached target; returns true if at least one accepted it, false when none is
+   * attached, all failed, or schema validation fails.
    */
   async send(msg: HostToWebviewMsg): Promise<boolean> {
-    if (this.isDisposed || !this.target) {
+    if (this.isDisposed || this.targets.size === 0) {
       console.warn("[MessageRouter] Target not set or router disposed; cannot send message.");
       return false;
     }
@@ -138,21 +155,35 @@ export class MessageRouter {
       return false;
     }
 
-    try {
-      return await this.target.postMessage(parseResult.data);
-    } catch (err) {
-      const sanitized = sanitizeLogText(String(err));
-      console.error(`[MessageRouter] postMessage failed: ${sanitized}`);
-      return false;
-    }
+    const results = await Promise.all(
+      [...this.targets].map(async (target) => {
+        try {
+          return await target.postMessage(parseResult.data);
+        } catch (err) {
+          const sanitized = sanitizeLogText(String(err));
+          console.error(`[MessageRouter] postMessage failed: ${sanitized}`);
+          return false;
+        }
+      })
+    );
+    return results.some(Boolean);
   }
 
   /**
-   * Cleans up handlers and target when panel or provider is disposed.
+   * Detaches `target` (or every target) when its webview is disposed. Handlers stay registered, so
+   * a re-resolved view or a re-opened panel (setTarget again) still gets replies.
+   */
+  detachTarget(target?: PostMessageTarget): void {
+    if (target) this.targets.delete(target);
+    else this.targets.clear();
+  }
+
+  /**
+   * Final cleanup on extension deactivation: clears handlers and target.
    */
   dispose(): void {
     this.isDisposed = true;
     this.handlers.clear();
-    this.target = null;
+    this.targets.clear();
   }
 }

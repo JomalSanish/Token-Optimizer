@@ -1,3 +1,9 @@
+/**
+ * Tests: CatalogService Extension Tests (T034, FR-043-FR-046).
+ *
+ * Exports: none (test suite)
+ * Feature: catalog
+ */
 import { describe, it, expect, vi } from "vitest";
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
@@ -29,7 +35,7 @@ describe("CatalogService Extension Tests (T034, FR-043-FR-046)", () => {
       const res = validateCatalogApiUrl(undefined);
       expect(res.isValid).toBe(true);
       expect(res.isOfflineMode).toBe(false);
-      expect(res.validatedUrl).toBe("https://catalog.token-optimizer.dev/v1");
+      expect(res.validatedUrl).toBe("http://127.0.0.1:3000/v1");
     });
 
     it("declares air-gapped offline-only mode when configured as empty string", () => {
@@ -195,6 +201,39 @@ describe("CatalogService Extension Tests (T034, FR-043-FR-046)", () => {
     expect(sentMsg.payload.isOffline).toBe(true);
     expect(sentMsg.payload.publishedAt).toBeDefined();
 
+    service.dispose();
+  });
+
+  it("re-sends catalog/updated on webview/ready and catalog/request (late-opened panel)", async () => {
+    const posted: Array<{ type: string; payload: { isOffline: boolean } }> = [];
+    // Router without a target: the activation-time push is lost, as when no panel is open yet.
+    const router = new MessageRouter();
+    const mockContext = {
+      globalState: { get: () => undefined, update: async () => {} },
+      extensionPath: path.resolve(__dirname, "../.."),
+      subscriptions: [],
+    } as unknown as import("vscode").ExtensionContext;
+    const service = new CatalogService(mockContext, router, {
+      client: {
+        getCatalogSnapshot: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")),
+      } as unknown as CatalogClient,
+      loader: new BundledSnapshotLoader(async (p: string) => await fs.readFile(p, "utf-8")),
+      bundledSnapshotPath: path.resolve(__dirname, "../../resources/catalog-snapshot.json"),
+    });
+    await service.initialize();
+    expect(posted).toHaveLength(0);
+
+    router.setTarget({
+      postMessage: async (m: unknown) => {
+        posted.push(m as (typeof posted)[number]);
+        return true;
+      },
+    });
+    await router.handleInbound({ version: 1, type: "webview/ready", payload: {} });
+    await router.handleInbound({ version: 1, type: "catalog/request", payload: {} });
+
+    expect(posted.map((m) => m.type)).toEqual(["catalog/updated", "catalog/updated"]);
+    expect(posted[0].payload.isOffline).toBe(true);
     service.dispose();
   });
 });

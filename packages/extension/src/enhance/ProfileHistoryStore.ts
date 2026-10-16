@@ -1,3 +1,9 @@
+/**
+ * Persists versioned project profiles (history, finalize) in workspace state.
+ *
+ * Exports: PROFILE_HISTORY_STORAGE_KEY, MAX_PROFILE_HISTORY_VERSIONS, ProfileHistoryStore
+ * Feature: token cost estimator
+ */
 import type * as vscode from "vscode";
 import {
   ProjectProfileSchema,

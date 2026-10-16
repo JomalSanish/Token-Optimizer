@@ -1,3 +1,9 @@
+/**
+ * Migration 003: creates the auditable pricing collection (sourceUrl + verifiedAt per row).
+ *
+ * Exports: up
+ * Feature: catalog
+ */
 import type { Db } from "mongodb";
 
 /**

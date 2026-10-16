@@ -1,3 +1,10 @@
+/**
+ * Migration 006: creates the platforms collection (IDE/agent platform detection + artifact
+ * targets).
+ *
+ * Exports: up
+ * Feature: catalog
+ */
 import type { Db } from "mongodb";
 
 /**

@@ -1,6 +1,14 @@
+/**
+ * Root ESLint flat config: TS/JS recommended rules, security and docblock custom rules, and the
+ * per-package import boundaries (core = platform-free, webview = browser sandbox).
+ *
+ * Exports: default (ESLint flat config array)
+ * Feature: tooling (lint / engineering rules)
+ */
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import noKeyInWebview from "./tools/eslint-rules/no-key-in-webview.js";
+import requireFileDocblock from "./tools/eslint-rules/require-file-docblock.js";
 
 export default tseslint.config(
   js.configs.recommended,
@@ -18,14 +26,22 @@ export default tseslint.config(
       ".agents/**",
       ".specify/**",
       "docs/**",
+      ".venv/**",
+      ".data/**",
+      "**/*.tmp.mts",
     ],
   },
   {
-    files: ["**/*.{js,mjs,cjs,ts,tsx}"],
+    files: ["**/*.{js,mjs,cjs,ts,tsx,mts,cts}"],
     plugins: {
       security: {
         rules: {
           "no-key-in-webview": noKeyInWebview,
+        },
+      },
+      docs: {
+        rules: {
+          "require-file-docblock": requireFileDocblock,
         },
       },
     },
@@ -36,6 +52,8 @@ export default tseslint.config(
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
       "security/no-key-in-webview": "error",
+      // Plan section 2, rule 1: module docblock (purpose, Exports:, Feature:) in every file
+      "docs/require-file-docblock": "error",
     },
   },
   // CommonJS scripts configuration
@@ -50,6 +68,12 @@ export default tseslint.config(
         __filename: "readonly",
         process: "readonly",
         console: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        Buffer: "readonly",
+        URL: "readonly",
+        fetch: "readonly",
+        TextDecoder: "readonly",
       },
     },
     rules: {

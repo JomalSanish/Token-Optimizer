@@ -1,3 +1,9 @@
+/**
+ * OpenAI-compatible adapter for any catalog provider with a custom baseUrl (e.g. Groq).
+ *
+ * Exports: OpenAICompatibleAdapterOptions, OpenAICompatibleAdapter
+ * Feature: providers
+ */
 import { OpenAIAdapter } from "./OpenAIAdapter.js";
 
 export interface OpenAICompatibleAdapterOptions {

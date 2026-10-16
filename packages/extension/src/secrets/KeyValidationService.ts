@@ -1,3 +1,9 @@
+/**
+ * Validates saved API keys through the provider adapters and reports the result to the webview.
+ *
+ * Exports: KeyValidationServiceOptions, KeyValidationService
+ * Feature: settings / API keys
+ */
 import type { HostToWebviewMsg } from "@token-optimizer/core";
 import type { ProviderAdapter } from "@token-optimizer/core";
 import { KeyService } from "./KeyService.js";

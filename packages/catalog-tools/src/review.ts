@@ -1,3 +1,9 @@
+/**
+ * Human review workflow for strategies: draft report and named-reviewer approval (Principle VIII).
+ *
+ * Exports: ReviewReportResult, generateReviewReport, approveStrategy
+ * Feature: catalog
+ */
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";

@@ -67,28 +67,36 @@
             "expected": 0.96,
             "high": 14.4,
             "currency": "USD",
-            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+            "expectedInput": 0.36,
+            "expectedOutput": 0.6
           },
           "claude-3-5-haiku-20241022": {
             "low": 0.008,
             "expected": 0.32,
             "high": 4.8,
             "currency": "USD",
-            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+            "expectedInput": 0.12,
+            "expectedOutput": 0.2
           },
           "gpt-4o": {
             "low": 0.0175,
             "expected": 0.7,
             "high": 10.5,
             "currency": "USD",
-            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+            "expectedInput": 0.3,
+            "expectedOutput": 0.4
           },
           "gpt-4o-mini": {
             "low": 0.0011,
             "expected": 0.042,
             "high": 0.63,
             "currency": "USD",
-            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+            "expectedInput": 0.018,
+            "expectedOutput": 0.024
           }
         },
         "explainTree": {
@@ -336,28 +344,36 @@
             "expected": 2.9922,
             "high": 76.608,
             "currency": "USD",
-            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+            "expectedInput": 0.7422,
+            "expectedOutput": 2.25
           },
           "claude-3-5-haiku-20241022": {
             "low": 0.0266,
             "expected": 0.9974,
             "high": 25.536,
             "currency": "USD",
-            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+            "expectedInput": 0.2474,
+            "expectedOutput": 0.75
           },
           "gpt-4o": {
             "low": 0.0625,
             "expected": 2.3436,
             "high": 60,
             "currency": "USD",
-            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+            "expectedInput": 0.8436,
+            "expectedOutput": 1.5
           },
           "gpt-4o-mini": {
             "low": 0.0038,
             "expected": 0.1406,
             "high": 3.6,
             "currency": "USD",
-            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+            "expectedInput": 0.0506,
+            "expectedOutput": 0.09
           }
         },
         "explainTree": {
@@ -595,28 +611,36 @@
         "expected": 3.9522,
         "high": 91.008,
         "currency": "USD",
-        "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+        "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+        "expectedInput": 1.1022,
+        "expectedOutput": 2.85
       },
       "claude-3-5-haiku-20241022": {
         "low": 0.0346,
         "expected": 1.3174,
         "high": 30.336,
         "currency": "USD",
-        "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+        "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+        "expectedInput": 0.3674,
+        "expectedOutput": 0.95
       },
       "gpt-4o": {
         "low": 0.08,
         "expected": 3.0436,
         "high": 70.5,
         "currency": "USD",
-        "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+        "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+        "expectedInput": 1.1436,
+        "expectedOutput": 1.9
       },
       "gpt-4o-mini": {
         "low": 0.0049,
         "expected": 0.1826,
         "high": 4.23,
         "currency": "USD",
-        "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+        "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+        "expectedInput": 0.0686,
+        "expectedOutput": 0.114
       }
     }
   },
@@ -689,28 +713,36 @@
             "expected": 54.8625,
             "high": 1481.2875,
             "currency": "USD",
-            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+            "expectedInput": 13.6125,
+            "expectedOutput": 41.25
           },
           "claude-3-5-haiku-20241022": {
             "low": 4.5694,
             "expected": 18.2875,
             "high": 493.7625,
             "currency": "USD",
-            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+            "expectedInput": 4.5375,
+            "expectedOutput": 13.75
           },
           "gpt-4o": {
             "low": 10.7388,
             "expected": 42.9688,
             "high": 1160.1563,
             "currency": "USD",
-            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+            "expectedInput": 15.4688,
+            "expectedOutput": 27.5
           },
           "gpt-4o-mini": {
             "low": 0.6443,
             "expected": 2.5781,
             "high": 69.6094,
             "currency": "USD",
-            "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+            "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+            "expectedInput": 0.9281,
+            "expectedOutput": 1.65
           }
         },
         "explainTree": {
@@ -948,28 +980,36 @@
         "expected": 54.8625,
         "high": 1481.2875,
         "currency": "USD",
-        "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+        "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+        "expectedInput": 13.6125,
+        "expectedOutput": 41.25
       },
       "claude-3-5-haiku-20241022": {
         "low": 4.5694,
         "expected": 18.2875,
         "high": 493.7625,
         "currency": "USD",
-        "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+        "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+        "expectedInput": 4.5375,
+        "expectedOutput": 13.75
       },
       "gpt-4o": {
         "low": 10.7388,
         "expected": 42.9688,
         "high": 1160.1563,
         "currency": "USD",
-        "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+        "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+        "expectedInput": 15.4688,
+        "expectedOutput": 27.5
       },
       "gpt-4o-mini": {
         "low": 0.6443,
         "expected": 2.5781,
         "high": 69.6094,
         "currency": "USD",
-        "pricingVerifiedAt": "2026-10-09T00:00:00Z"
+        "pricingVerifiedAt": "2026-10-09T00:00:00Z",
+        "expectedInput": 0.9281,
+        "expectedOutput": 1.65
       }
     }
   },

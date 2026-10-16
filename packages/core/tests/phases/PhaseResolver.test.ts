@@ -1,3 +1,9 @@
+/**
+ * Tests: PhaseResolver (T067, FR-017, FR-052, Principle IV).
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect } from "vitest";
 import {
   PhaseResolver,

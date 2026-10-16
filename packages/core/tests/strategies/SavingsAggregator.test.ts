@@ -1,8 +1,18 @@
+/**
+ * Tests: SavingsAggregator (T070, T089, FR-029, Principle V).
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect } from "vitest";
 import {
   SavingsAggregator,
   combineSavings,
+  combineSavingsByChannel,
+  inputCostShare,
+  techniqueChannels,
 } from "../../src/strategies/SavingsAggregator.js";
+import snapshot from "../../resources/catalog-snapshot.json";
 import type { Strategy } from "../../src/protocol/types.js";
 
 const strategyA: Strategy = {
@@ -77,7 +87,7 @@ describe("SavingsAggregator (T070, T089, FR-029, Principle V)", () => {
     // 1 - (1 - 0.5) * (1 - 0.5) = 1 - 0.25 = 0.75 (75%)
     expect(combined.minPercent).toBe(75);
     expect(combined.maxPercent).toBe(75);
-    expect(combined.basis).toContain("Multiplicative compounding");
+    expect(combined.basis).toMatch(/^Input 75–75% on ~50% of cost, output 75–75% on the rest/);
   });
 
   it("calculates min and max ranges multiplicatively and separately", () => {
@@ -101,4 +111,34 @@ describe("SavingsAggregator (T070, T089, FR-029, Principle V)", () => {
     expect(combineSavings([], "build").minPercent).toBe(0);
     expect(combineSavings([strategyB], "build").minPercent).toBe(0);
   });
+
+  describe("input/output split (technique affects)", () => {
+    const input50 = { ...strategyFiftyOne, optimizer: { mode: "rule", order: 1, affects: "input" } } as Strategy;
+    const output50 = { ...strategyFiftyTwo, optimizer: { mode: "rule", order: 2, affects: "output" } } as Strategy;
+
+    it("never compounds an input technique with an output technique", () => {
+      const ch = combineSavingsByChannel([input50, output50], "runtime");
+      expect(ch.input.maxPercent).toBe(50);
+      expect(ch.output.maxPercent).toBe(50);
+      // 50% of input spend + 50% of output spend = 50% of total, not 75%.
+      expect(combineSavings([input50, output50], "runtime", 0.3).maxPercent).toBe(50);
+      expect(combineSavings([input50], "runtime", 0.3).maxPercent).toBe(15);
+      expect(techniqueChannels(strategyA)).toEqual(["input", "output"]);
+    });
+
+    it("all 7 catalog techniques no longer add up to ~96%", () => {
+      const all = (snapshot as { strategies: Strategy[] }).strategies;
+      expect(all).toHaveLength(7);
+      const share = inputCostShare(
+        { llm: { avgPromptTokens: 1500, avgOutputTokens: 300, avgPrefixTokens: 1200 } } as never,
+        (snapshot as { pricing: never[] }).pricing
+      );
+      expect(share).toBeGreaterThan(0.5);
+      expect(share).toBeLessThan(0.8);
+      const total = combineSavings(all, "runtime", share);
+      expect(total.maxPercent).toBeLessThan(90);
+      expect(total.basis).toMatch(/^Input .* output .* on the rest/);
+    });
+  });
 });
+

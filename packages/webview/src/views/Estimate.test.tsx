@@ -1,3 +1,9 @@
+/**
+ * Tests: Estimate View Component (T073, T074, T134, T135, US3, FR-017-FR-024).
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";

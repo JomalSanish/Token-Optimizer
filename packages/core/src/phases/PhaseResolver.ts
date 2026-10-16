@@ -1,3 +1,10 @@
+/**
+ * Validates confirmed project phases against the catalog phase taxonomy.
+ *
+ * Exports: UnconfirmedPhaseError, UnknownPhaseTypeError, PhaseTrackMismatchError, ResolvedPhase,
+ *   resolvePhases, PhaseResolver
+ * Feature: token cost estimator
+ */
 import type { ConfirmedPhase, Phase } from "../protocol/types.js";
 
 export class UnconfirmedPhaseError extends Error {

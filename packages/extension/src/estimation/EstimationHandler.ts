@@ -1,3 +1,9 @@
+/**
+ * Host handler for estimate/request: runs the core estimation engine on the finalized profile.
+ *
+ * Exports: EstimationHandlerOptions, EstimationHandler
+ * Feature: token cost estimator
+ */
 import * as vscode from "vscode";
 import {
   type CatalogSnapshot,

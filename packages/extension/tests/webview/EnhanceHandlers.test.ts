@@ -1,3 +1,9 @@
+/**
+ * Tests: EnhanceHandlers Unit Tests (T061, T148, FR-015, FR-052).
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type * as vscode from "vscode";
 

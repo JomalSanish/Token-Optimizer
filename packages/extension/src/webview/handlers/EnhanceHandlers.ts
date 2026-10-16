@@ -1,3 +1,9 @@
+/**
+ * Host handlers for Enhance runs, profile history, phase edits and finalize.
+ *
+ * Exports: EnhanceHandlersOptions, EnhanceHandlers
+ * Feature: token cost estimator
+ */
 import * as vscode from "vscode";
 import type {
   CatalogSnapshot,

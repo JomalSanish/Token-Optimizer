@@ -1,3 +1,9 @@
+/**
+ * Tests: eslint-config.test.js.
+ *
+ * Exports: none (test suite)
+ * Feature: tooling
+ */
 import { test } from "node:test";
 import assert from "node:assert";
 import { ESLint } from "eslint";

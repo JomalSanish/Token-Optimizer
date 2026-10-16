@@ -1,3 +1,10 @@
+/**
+ * Catalog API routes: GET /v1/catalog (full validated snapshot with ETag) and
+ * GET /v1/catalog/:collection. Only approved strategies are served (Principle VIII).
+ *
+ * Exports: catalogRoutes, CatalogRouteOptions
+ * Feature: catalog
+ */
 import type { FastifyPluginAsync } from "fastify";
 import type { Db } from "mongodb";
 import {
@@ -9,6 +16,7 @@ import {
   StrategySchema,
   PlatformSchema,
   PromptTemplateSchema,
+  RouterPresetSchema,
   type CatalogSnapshot,
 } from "@token-optimizer/core";
 import { generateETag, matchesETag, CACHE_CONTROL_HEADER } from "../db/etag.js";
@@ -26,7 +34,15 @@ const ALLOWED_COLLECTIONS = [
   "platforms",
   "prompt_templates",
   "promptTemplates",
+  "router_presets",
+  "routerPresets",
 ];
+
+/** API collection name -> Mongo collection name. */
+const MONGO_COLLECTION: Record<string, string> = {
+  promptTemplates: "prompt_templates",
+  routerPresets: "router_presets",
+};
 
 const sanitizeDocument = (
   doc: Record<string, unknown>,
@@ -124,6 +140,9 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (
       const promptTemplates = (
         await db.collection("prompt_templates").find({}).toArray()
       ).map((d) => sanitizeDocument(d, "prompt_templates"));
+      const routerPresets = (await db.collection("router_presets").find({}).toArray()).map((d) =>
+        sanitizeDocument(d, "router_presets")
+      );
 
       const rawSnapshot: CatalogSnapshot = {
         version,
@@ -136,6 +155,7 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (
         strategies: strategies as unknown as CatalogSnapshot["strategies"],
         platforms: platforms as unknown as CatalogSnapshot["platforms"],
         promptTemplates: promptTemplates as unknown as CatalogSnapshot["promptTemplates"],
+        routerPresets: routerPresets as unknown as CatalogSnapshot["routerPresets"],
       };
 
       // Zod-validate response against CatalogSnapshotSchema
@@ -179,7 +199,7 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (
           return reply.status(304).send();
         }
 
-        const mongoColName = collection === "promptTemplates" ? "prompt_templates" : collection;
+        const mongoColName = MONGO_COLLECTION[collection] ?? collection;
         const filter = collection === "strategies" ? { reviewStatus: "approved" } : {};
 
         const rawDocs = await db.collection(mongoColName).find(filter).toArray();
@@ -200,6 +220,8 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRouteOptions> = async (
           items.forEach((item) => PlatformSchema.parse(item));
         } else if (collection === "prompt_templates" || collection === "promptTemplates") {
           items.forEach((item) => PromptTemplateSchema.parse(item));
+        } else if (collection === "router_presets" || collection === "routerPresets") {
+          items.forEach((item) => RouterPresetSchema.parse(item));
         }
 
         return reply.status(200).send({

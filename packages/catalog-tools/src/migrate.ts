@@ -1,6 +1,15 @@
-import { fileURLToPath, pathToFileURL } from "node:url";
+/**
+ * Runs the numbered catalog migrations in packages/catalog-api/migrations. Applied migrations are
+ * recorded in the `schema_migrations` collection and skipped on later runs, so a persistent
+ * database (catalog:dev, Atlas) can be migrated repeatedly without re-applying old steps.
+ *
+ * Exports: runMigrations, findMigrationsDir, MIGRATIONS_LEDGER, MigrationOptions
+ * Feature: catalog
+ */
+import { fileURLToPath } from "node:url";
 import * as path from "node:path";
 import * as fs from "node:fs";
+import * as ts from "typescript";
 import { MongoClient, type Db } from "mongodb";
 import { loadEnv } from "./env.js";
 
@@ -10,7 +19,11 @@ export interface MigrationOptions {
   migrationsDir?: string;
   mongoUri?: string;
   dbName?: string;
+  /** Re-run migrations even if the ledger says they were applied. */
+  force?: boolean;
 }
+
+export const MIGRATIONS_LEDGER = "schema_migrations";
 
 export function findMigrationsDir(startDir?: string): string {
   if (startDir && fs.existsSync(startDir)) return startDir;
@@ -62,15 +75,40 @@ export async function runMigrations(
       throw new Error("Database instance required for non-dry-run migrations");
     }
 
+    const ledger = db.collection(MIGRATIONS_LEDGER);
+    if (!options.force && (await ledger.findOne({ file }))) {
+      continue;
+    }
+
     console.log(`Executing migration ${file} (Step ${stepNumber})...`);
     const filePath = path.join(migrationsDir, file);
-    const mod = await import(pathToFileURL(filePath).href);
+    // Load through a data URL instead of importing the path. Vitest/Vite mishandles Windows
+    // file URLs when the workspace path contains spaces (for example, `TCS%20Projects`).
+    // Migration files are trusted source files and currently have no runtime imports.
+    const source = fs.readFileSync(filePath, "utf8");
+    const javascript = ts.transpileModule(source, {
+      compilerOptions: {
+        module: ts.ModuleKind.ESNext,
+        target: ts.ScriptTarget.ES2022,
+      },
+    }).outputText;
+    const dataUrl = `data:text/javascript;base64,${Buffer.from(javascript).toString("base64")}`;
+    // Use Node's native ESM loader; a regular dynamic import is intercepted by Vitest here.
+    const nativeImport = new Function("specifier", "return import(specifier)") as (
+      specifier: string
+    ) => Promise<{ up?: (database: Db) => Promise<void> }>;
+    const mod = await nativeImport(dataUrl);
 
     if (typeof mod.up !== "function") {
       throw new Error(`Migration ${file} does not export an up() function`);
     }
 
     await mod.up(db);
+    await ledger.updateOne(
+      { file },
+      { $set: { file, appliedAt: new Date().toISOString() } },
+      { upsert: true }
+    );
     console.log(`Completed migration ${file}`);
     executed.push(file);
   }

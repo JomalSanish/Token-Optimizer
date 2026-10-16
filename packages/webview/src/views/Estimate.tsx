@@ -1,3 +1,10 @@
+/**
+ * Estimate tab: per-phase cost table, model comparison (with a "with selected techniques" cost
+ * per track and model, from the host's compounded savings range) and explain popovers.
+ *
+ * Exports: EstimateProps, Estimate
+ * Feature: token cost estimator
+ */
 import React, { useState } from "react";
 import {
   Calculator,
@@ -11,6 +18,10 @@ import {
 import { vscodeBridge } from "../protocol/vscode";
 import { formatCost } from "../utils/format";
 import { ExplainPopover } from "../components/ExplainPopover";
+import {
+  WithTechniquesCost,
+  useTechniqueSavings,
+} from "../components/estimate/WithTechniquesCost";
 import type {
   EstimationResult,
   CostRange,
@@ -48,6 +59,7 @@ export const Estimate: React.FC<EstimateProps> = ({
   const [overrides, setOverrides] = useState<Record<string, Partial<PhaseOverride>>>({});
 
   const currentVersion = estimation?.profileVersion ?? profileVersion;
+  const techniqueSavings = useTechniqueSavings(profile?.profileVersion ?? estimation?.profileVersion);
 
   // Find description for a phase
   const getPhaseDescription = (phaseId: string, phaseName: string): string => {
@@ -151,7 +163,7 @@ export const Estimate: React.FC<EstimateProps> = ({
   if (profile && !profile.finalizedAt) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between glass-panel p-4 rounded-xl border border-slate-800">
+        <div className="flex items-center justify-between flex-wrap gap-y-2 glass-panel p-4 rounded-xl border border-slate-800">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400">
               <Lock className="w-5 h-5" />
@@ -184,7 +196,7 @@ export const Estimate: React.FC<EstimateProps> = ({
   return (
     <div className="space-y-6">
       {/* Header & Track Selector */}
-      <div className="flex items-center justify-between glass-panel p-4 rounded-xl border border-slate-800">
+      <div className="flex items-center justify-between flex-wrap gap-y-2 glass-panel p-4 rounded-xl border border-slate-800">
         <div className="flex items-center gap-2.5">
           <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400">
             <Calculator className="w-5 h-5" />
@@ -292,7 +304,7 @@ export const Estimate: React.FC<EstimateProps> = ({
           {/* RUNTIME Track Scale Assumptions Panel (FR-021, H4) */}
           {activeTrack === "runtime" && (
             <div className="glass-panel p-4 rounded-xl border border-indigo-500/30 bg-indigo-950/10 space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-y-2">
                 <span className="text-xs font-semibold text-indigo-300 flex items-center gap-1.5">
                   <Zap className="w-3.5 h-3.5 text-indigo-400" />
                   Runtime Scale Breakdowns (FR-021)
@@ -301,7 +313,7 @@ export const Estimate: React.FC<EstimateProps> = ({
                   {requestsPerDay} req/day • {monthlyDays} active days/mo
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-center pt-1 font-mono">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center pt-1 font-mono">
                 <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
                   <div className="flex items-center justify-between px-1">
                     <span className="text-[10px] text-slate-400 block">Per Request</span>
@@ -358,7 +370,7 @@ export const Estimate: React.FC<EstimateProps> = ({
 
           {/* Phase List with Editable Assumptions & Descriptions (FR-017, FR-018, FR-020, T134, H6, H7) */}
           <div className="glass-panel p-5 rounded-xl border border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-y-2">
               <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5 text-indigo-400" />
                 <span>
@@ -611,7 +623,7 @@ export const Estimate: React.FC<EstimateProps> = ({
 
           {/* Extended Model-Comparison Table (T135, FR-024, H2) */}
           <div className="glass-panel p-5 rounded-xl border border-slate-800 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-y-2">
               <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                 <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
                 <span>Multi-Model Comparison & Active Pricing (FR-024, T135)</span>
@@ -632,6 +644,8 @@ export const Estimate: React.FC<EstimateProps> = ({
                     <th className="pb-2 font-medium">Pricing Date</th>
                     <th className="pb-2 font-medium">Build Total</th>
                     <th className="pb-2 font-medium">Runtime Total</th>
+                    <th className="pb-2 font-medium">Build w/ selected techniques</th>
+                    <th className="pb-2 font-medium">Runtime w/ selected techniques</th>
                     <th className="pb-2 font-medium text-right">Explain</th>
                   </tr>
                 </thead>
@@ -701,6 +715,24 @@ export const Estimate: React.FC<EstimateProps> = ({
                         </td>
                         <td className="py-2.5 text-indigo-300 font-semibold">
                           {formatCost(runtimeCost?.expected ?? 0)}
+                        </td>
+                        <td className="py-2.5">
+                          <WithTechniquesCost
+                            cost={buildCost?.expected ?? 0}
+                            range={techniqueSavings?.build}
+                            split={{ input: buildCost?.expectedInput, output: buildCost?.expectedOutput }}
+                            channels={techniqueSavings?.channels?.build}
+                            label={`Build with selected techniques for ${mId}`}
+                          />
+                        </td>
+                        <td className="py-2.5">
+                          <WithTechniquesCost
+                            cost={runtimeCost?.expected ?? 0}
+                            range={techniqueSavings?.runtime}
+                            split={{ input: runtimeCost?.expectedInput, output: runtimeCost?.expectedOutput }}
+                            channels={techniqueSavings?.channels?.runtime}
+                            label={`Runtime with selected techniques for ${mId}`}
+                          />
                         </td>
                         <td className="py-2.5 text-right font-sans">
                           <button

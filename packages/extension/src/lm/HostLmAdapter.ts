@@ -1,3 +1,9 @@
+/**
+ * ProviderAdapter backed by the VS Code Language Model API (e.g. Copilot).
+ *
+ * Exports: HostLmSelector, HostLmAdapter
+ * Feature: providers
+ */
 import * as vscode from "vscode";
 import type { Provider, ChatMessage, CompletionResult } from "@token-optimizer/core";
 

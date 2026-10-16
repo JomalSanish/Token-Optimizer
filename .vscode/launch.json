@@ -12,6 +12,19 @@
         "${workspaceFolder}/packages/extension/dist/**/*.js"
       ],
       "preLaunchTask": "build-extension"
+    },
+    {
+      "name": "Run Extension (demo workspace)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/extension",
+        "${workspaceFolder}/.demo-workspace"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/packages/extension/dist/**/*.js"
+      ],
+      "preLaunchTask": "build-extension"
     }
   ]
 }

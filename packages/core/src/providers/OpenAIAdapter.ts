@@ -1,3 +1,9 @@
+/**
+ * OpenAI Chat Completions adapter (key validation, model list, completion with retry).
+ *
+ * Exports: OpenAIAdapter
+ * Feature: providers
+ */
 import type {
   ProviderAdapter,
   KeyValidationResult,
@@ -117,6 +123,10 @@ export class OpenAIAdapter implements ProviderAdapter {
       max_tokens: options.maxTokens || 4096,
       temperature: options.temperature ?? 0,
     };
+
+    if (options.responseFormat === "json_object" && !options.schema) {
+      body.response_format = { type: "json_object" };
+    }
 
     if (options.schema) {
       body.response_format = {

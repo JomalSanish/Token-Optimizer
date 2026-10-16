@@ -1,3 +1,9 @@
+/**
+ * Google Gemini API adapter (key validation, model list, completion with retry).
+ *
+ * Exports: GoogleAdapter
+ * Feature: providers
+ */
 import type {
   ProviderAdapter,
   KeyValidationResult,

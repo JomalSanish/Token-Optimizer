@@ -1,3 +1,9 @@
+/**
+ * Bundles the extension host (esbuild) and copies the built webview into dist/webview.
+ *
+ * Exports: none
+ * Feature: tooling (build config)
+ */
 const esbuild = require("esbuild");
 const fs = require("node:fs");
 const path = require("node:path");

@@ -1,3 +1,9 @@
+/**
+ * Tests: ParamResolver (T071, FR-020, clarification Q2).
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect } from "vitest";
 import {
   ParamResolver,

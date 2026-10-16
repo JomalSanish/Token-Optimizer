@@ -1,3 +1,9 @@
+/**
+ * Resolves enabled models per provider from the catalog and the provider's model list.
+ *
+ * Exports: ModelSelectionService
+ * Feature: settings / API keys
+ */
 import type { CatalogSnapshot, Model, ProviderAdapter } from "@token-optimizer/core";
 
 export class ModelSelectionService {

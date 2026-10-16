@@ -1,3 +1,9 @@
+/**
+ * Migration 007: creates the prompt_templates collection.
+ *
+ * Exports: up
+ * Feature: catalog
+ */
 import type { Db } from "mongodb";
 
 /**

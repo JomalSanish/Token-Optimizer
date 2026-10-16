@@ -1,3 +1,9 @@
+/**
+ * Tests: WorkspaceScanner Unit Tests (T058, FR-009).
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect, vi } from "vitest";
 import type * as vscode from "vscode";
 

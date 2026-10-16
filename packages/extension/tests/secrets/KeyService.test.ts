@@ -1,3 +1,9 @@
+/**
+ * Tests: KeyService Unit Tests (T042, T054, Principle I).
+ *
+ * Exports: none (test suite)
+ * Feature: settings / API keys
+ */
 import { describe, it, expect } from "vitest";
 import { KeyService } from "../../src/secrets/KeyService.js";
 import type * as vscode from "vscode";

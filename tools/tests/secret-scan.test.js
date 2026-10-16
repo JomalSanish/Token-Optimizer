@@ -1,3 +1,9 @@
+/**
+ * Tests: secret-scan.test.js.
+ *
+ * Exports: none (test suite)
+ * Feature: tooling
+ */
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";

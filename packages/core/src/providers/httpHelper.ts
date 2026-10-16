@@ -1,3 +1,10 @@
+/**
+ * fetchWithRetry: HTTP helper with timeout and exponential backoff (retries 429/5xx and thrown
+ * errors).
+ *
+ * Exports: FetchWithRetryOptions, fetchWithRetry
+ * Feature: providers
+ */
 export interface FetchWithRetryOptions {
   maxRetries?: number;
   initialDelayMs?: number;

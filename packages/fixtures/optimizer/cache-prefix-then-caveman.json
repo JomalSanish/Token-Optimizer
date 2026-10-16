@@ -1,0 +1,40 @@
+{
+  "id": "cache-prefix-then-caveman",
+  "description": "cache-prefix-ordering stably moves system messages first; caveman-output appends its instruction to the first system message after a blank line.",
+  "techniques": [
+    "cache-prefix-ordering",
+    "caveman-output"
+  ],
+  "config": {
+    "caveman-output": {
+      "instruction": "Be terse."
+    }
+  },
+  "input": {
+    "kind": "messages",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Question?"
+      },
+      {
+        "role": "system",
+        "content": "You are helpful."
+      }
+    ]
+  },
+  "expected": {
+    "kind": "messages",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are helpful.\n\nBe terse."
+      },
+      {
+        "role": "user",
+        "content": "Question?"
+      }
+    ],
+    "params": {}
+  }
+}

@@ -1,16 +1,38 @@
+/**
+ * Runs Enhance: description -> LLM (JSON mode where supported) -> host-completed, validated
+ * ProjectProfile (one repair attempt listing the exact Zod issues), streamed to the webview.
+ * The call cost uses the effective-date pricing lookup shared with the estimation engine.
+ *
+ * Exports: EnhanceRequest, EnhanceServiceOptions, EnhanceService
+ * Feature: token cost estimator
+ */
 import {
   ProjectProfileSchema,
   suggestPhases,
   CostCalculator,
+  findActivePricing,
+  pricingReferenceTime,
   type ProjectProfile,
   type ProviderAdapter,
   type CatalogSnapshot,
   type ChatMessage,
   type HostToWebviewMsg,
+  type Phase,
 } from "@token-optimizer/core";
+import type { ZodIssue } from "zod";
 import { KeyService } from "../secrets/KeyService.js";
 import { ProfileHistoryStore } from "./ProfileHistoryStore.js";
 import { TaxonomyPromptBuilder } from "./TaxonomyPromptBuilder.js";
+import {
+  LlmProfileSchema,
+  PROFILE_SHAPE_PROMPT,
+  buildRepairPrompt,
+  completeProfile,
+  unwrapProfilePayload,
+} from "./profileCompletion.js";
+
+/** Provider adapter types that accept response_format json_object. */
+const JSON_MODE_ADAPTERS = new Set(["openai", "openai-compatible", "mistral"]);
 
 export interface EnhanceRequest {
   description: string;
@@ -28,10 +50,9 @@ export interface EnhanceServiceOptions {
   historyStore: ProfileHistoryStore;
 }
 
-interface ExtractedPayload {
-  narrative: string;
-  profile: unknown;
-}
+type ValidationOutcome =
+  | { ok: true; narrative: string; profile: ProjectProfile }
+  | { ok: false; issues: ZodIssue[] | null };
 
 export class EnhanceService {
   private keyService: KeyService;
@@ -117,8 +138,12 @@ export class EnhanceService {
         .replace(/\{\{description\}\}/g, () => description)
         .replace(/\{\{phasesTaxonomy\}\}/g, () => taxonomyResult.phasesTaxonomyText);
     } else {
-      promptText = `Analyze project architecture and generate token optimization profile.\n\nProject:\n${description}\n\nPhases:\n${taxonomyResult.phasesTaxonomyText}\n\nOutput JSON with "narrative" and "profile" conforming to ProjectProfileSchema.`;
+      promptText = `Analyze project architecture and generate token optimization profile.\n\nProject:\n${description}\n\nPhases:\n${taxonomyResult.phasesTaxonomyText}`;
     }
+    // Field list + example JSON: at {{profileShape}} when the template has it, else appended.
+    promptText = promptText.includes("{{profileShape}}")
+      ? promptText.replace(/\{\{profileShape\}\}/g, () => PROFILE_SHAPE_PROMPT)
+      : `${promptText}\n\n${PROFILE_SHAPE_PROMPT}`;
 
     if (previousProfileContext) {
       promptText += previousProfileContext;
@@ -128,7 +153,7 @@ export class EnhanceService {
       {
         role: "system",
         content:
-          "You are an expert AI architect. You analyze software descriptions and produce JSON with keys 'narrative' (string describing architecture) and 'profile' conforming to ProjectProfileSchema. Return ONLY valid JSON.",
+          "You are an expert AI architect. You analyze software descriptions and produce a JSON object with keys 'narrative' (string describing the architecture) and 'profile' (the project profile described in the request). Return ONLY valid JSON.",
       },
       {
         role: "user",
@@ -137,6 +162,15 @@ export class EnhanceService {
     ];
 
     const getKey = this.keyService.getKeyGetter(providerId, keySlot ?? 0);
+    const adapterType = snapshot?.providers.find((p) => p.id === providerId)?.adapterType;
+    const jsonMode = adapterType && JSON_MODE_ADAPTERS.has(adapterType)
+      ? { responseFormat: "json_object" as const }
+      : {};
+    const validate = (text: string) =>
+      this.validateResponse(text, {
+        profileVersion: this.historyStore.getNextVersion(),
+        catalogPhases,
+      });
 
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
@@ -146,6 +180,7 @@ export class EnhanceService {
       const result = await adapter.complete(messages, getKey, {
         model: modelId,
         temperature: 0.2,
+        ...jsonMode,
       });
       content = result.content;
       totalInputTokens += result.inputTokens ?? 0;
@@ -163,40 +198,26 @@ export class EnhanceService {
     }
 
     // Try parsing initial response
-    let extracted = this.extractJson(content);
-    let validationResult = extracted
-      ? ProjectProfileSchema.safeParse(extracted.profile)
-      : null;
+    let outcome = validate(content);
 
     // Single repair attempt if parse or schema validation failed (T059, FR-010, FR-013)
-    if (!extracted || !validationResult || !validationResult.success) {
-      const errorMsg = !extracted
-        ? "Malformed JSON output"
-        : validationResult?.error?.issues
-            .map((i) => `${i.path.join(".")}: ${i.message}`)
-            .join("; ");
-
+    if (!outcome.ok) {
       const repairMessages: ChatMessage[] = [
         ...messages,
         { role: "assistant", content },
-        {
-          role: "user",
-          content: `The previous response failed validation: ${errorMsg}. Please respond with ONLY valid JSON containing "narrative" (string) and "profile" (valid ProjectProfileSchema).`,
-        },
+        { role: "user", content: buildRepairPrompt(outcome.issues) },
       ];
 
       try {
         const repairResult = await adapter.complete(repairMessages, getKey, {
           model: modelId,
           temperature: 0.1,
+          ...jsonMode,
         });
         totalInputTokens += repairResult.inputTokens ?? 0;
         totalOutputTokens += repairResult.outputTokens ?? 0;
 
-        extracted = this.extractJson(repairResult.content);
-        validationResult = extracted
-          ? ProjectProfileSchema.safeParse(extracted.profile)
-          : null;
+        outcome = validate(repairResult.content);
       } catch (err) {
         await this.postMessage({
           version: 1,
@@ -210,7 +231,7 @@ export class EnhanceService {
       }
 
       // If still invalid after the single repair attempt, abort without altering previous version
-      if (!extracted || !validationResult || !validationResult.success) {
+      if (!outcome.ok) {
         await this.postMessage({
           version: 1,
           type: "enhance/error",
@@ -223,26 +244,11 @@ export class EnhanceService {
       }
     }
 
-    const narrative = extracted.narrative || "Architecture synthesis completed.";
-    const profile = validationResult.data;
+    const narrative = outcome.narrative || "Architecture synthesis completed.";
+    const profile = outcome.profile;
 
-    // S3-5: LLM output must not be trusted for confirmation or finalization (FR-052, Principle X)
-    delete (profile as { finalizedAt?: string }).finalizedAt;
-
-    // Validate phases against catalog taxonomy (T133, T147, FR-052)
-    const validPhaseTypeIds = new Set(catalogPhases.map((p) => p.id));
-    let usablePhases = Array.isArray(profile.phases) && profile.phases.length > 0;
-    if (usablePhases) {
-      for (const phase of profile.phases) {
-        if (!validPhaseTypeIds.has(phase.phaseTypeId)) {
-          usablePhases = false;
-          break;
-        }
-      }
-    }
-
-    // Fall back to deterministic PhaseSuggester if no usable phases returned
-    if (!usablePhases) {
+    // Fall back to deterministic PhaseSuggester if no usable phases returned (T133, T147)
+    if (profile.phases.length === 0) {
       profile.phases = suggestPhases(profile, catalogPhases);
     }
 
@@ -269,9 +275,9 @@ export class EnhanceService {
       });
     }
 
-    // Calculate prompt execution cost
+    // Calculate prompt execution cost (effective-date pricing, same lookup as EstimationEngine)
     let costUsd = 0;
-    const pricing = snapshot?.pricing?.find((p) => p.modelId === modelId);
+    const pricing = findActivePricing(modelId, snapshot?.pricing ?? [], pricingReferenceTime(snapshot));
     if (pricing) {
       costUsd = CostCalculator.computeCostUsd(totalInputTokens, totalOutputTokens, pricing);
     }
@@ -320,7 +326,40 @@ export class EnhanceService {
     return entry.profile;
   }
 
-  private extractJson(content: string): ExtractedPayload | null {
+  /**
+   * Parses the LLM text, checks the profile against the LLM-facing schema (issues feed the repair
+   * prompt), lets the host complete profileVersion/createdAt/schemaVersion and phase defaults, and
+   * validates the result with ProjectProfileSchema. Phases with unknown phase types are dropped as
+   * a set (the caller then falls back to PhaseSuggester).
+   */
+  private validateResponse(
+    content: string,
+    opts: { profileVersion: number; catalogPhases: Phase[] }
+  ): ValidationOutcome {
+    const parsed = this.extractJson(content);
+    if (!parsed) return { ok: false, issues: null };
+    const { narrative, profile: raw } = unwrapProfilePayload(parsed);
+
+    const llm = LlmProfileSchema.safeParse(raw);
+    if (!llm.success) return { ok: false, issues: llm.error.issues };
+
+    const completed = completeProfile(llm.data, {
+      profileVersion: opts.profileVersion,
+      createdAt: new Date().toISOString(),
+      catalogPhases: opts.catalogPhases,
+    }) as { phases: Array<{ phaseTypeId: string }> };
+    const known = new Set(opts.catalogPhases.map((p) => p.id));
+    if (completed.phases.some((p) => !known.has(p.phaseTypeId))) {
+      completed.phases = [];
+    }
+
+    const final = ProjectProfileSchema.safeParse(completed);
+    return final.success
+      ? { ok: true, narrative, profile: final.data }
+      : { ok: false, issues: final.error.issues };
+  }
+
+  private extractJson(content: string): unknown {
     if (!content || typeof content !== "string") {
       return null;
     }
@@ -329,7 +368,7 @@ export class EnhanceService {
     try {
       const parsed = JSON.parse(content.trim());
       if (parsed && typeof parsed === "object") {
-        return parsed as ExtractedPayload;
+        return parsed;
       }
     } catch {
       // Continue to next extraction strategy
@@ -341,7 +380,7 @@ export class EnhanceService {
       try {
         const parsed = JSON.parse(codeBlockMatch[1].trim());
         if (parsed && typeof parsed === "object") {
-          return parsed as ExtractedPayload;
+          return parsed;
         }
       } catch {
         // Continue
@@ -356,7 +395,7 @@ export class EnhanceService {
         const snippet = content.slice(firstBrace, lastBrace + 1);
         const parsed = JSON.parse(snippet);
         if (parsed && typeof parsed === "object") {
-          return parsed as ExtractedPayload;
+          return parsed;
         }
       } catch {
         // Fall through

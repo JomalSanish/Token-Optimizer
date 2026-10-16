@@ -1,3 +1,9 @@
+/**
+ * Tests: ModelSelectionService Unit Tests (T051, FR-002, US1).
+ *
+ * Exports: none (test suite)
+ * Feature: settings / API keys
+ */
 import { describe, it, expect, vi } from "vitest";
 import { ModelSelectionService } from "../../src/secrets/ModelSelectionService.js";
 import type { CatalogSnapshot, ProviderAdapter, Model } from "@token-optimizer/core";

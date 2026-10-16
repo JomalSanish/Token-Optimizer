@@ -1,3 +1,9 @@
+/**
+ * ETag and Cache-Control helpers for the read-only Catalog API.
+ *
+ * Exports: generateETag, matchesETag, CACHE_CONTROL_HEADER
+ * Feature: catalog
+ */
 import { createHash } from "node:crypto";
 
 /**

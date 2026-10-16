@@ -1,3 +1,9 @@
+/**
+ * Host handlers for API keys, enabled models, platform and Enhance model selection.
+ *
+ * Exports: AuthHandlersOptions, AuthHandlers
+ * Feature: settings / API keys
+ */
 import * as vscode from "vscode";
 import {
   UserSetupStore,

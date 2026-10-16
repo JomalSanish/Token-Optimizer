@@ -1,3 +1,9 @@
+/**
+ * Tests: Provider Adapters Unit Tests (T043-T048, FR-003, FR-023, Principle X).
+ *
+ * Exports: none (test suite)
+ * Feature: providers
+ */
 import { describe, it, expect, vi } from "vitest";
 import {
   AnthropicAdapter,

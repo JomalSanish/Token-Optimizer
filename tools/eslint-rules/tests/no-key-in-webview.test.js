@@ -1,3 +1,9 @@
+/**
+ * Tests: no-key-in-webview.test.js.
+ *
+ * Exports: none (test suite)
+ * Feature: tooling
+ */
 import { test } from "node:test";
 import { RuleTester } from "eslint";
 import noKeyInWebview from "../no-key-in-webview.js";

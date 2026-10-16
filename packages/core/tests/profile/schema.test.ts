@@ -1,3 +1,9 @@
+/**
+ * Tests: ProjectProfileSchema Unit Tests (T057, contracts/project-profile.schema.json, FR-010).
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect } from "vitest";
 import { ProjectProfileSchema, type ProjectProfile } from "../../src/profile/schema.js";
 

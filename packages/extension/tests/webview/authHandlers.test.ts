@@ -1,3 +1,9 @@
+/**
+ * Tests: AuthHandlers Unit Tests (T052, Principle I & II).
+ *
+ * Exports: none (test suite)
+ * Feature: settings / API keys
+ */
 import { describe, it, expect, vi } from "vitest";
 
 vi.mock("vscode", () => ({

@@ -1,3 +1,12 @@
+/**
+ * Token counting layer: exact tokenizers where available, labelled char-based approximation
+ * otherwise.
+ *
+ * Exports: TokenizerCountResult, Tokenizer, TiktokenEncoder, TiktokenLoader, EndpointCountGetter,
+ *   TokenizerLayerOptions, CharApproxTokenizer, TiktokenTokenizer, EndpointTokenizer, getTokenizer,
+ *   TokenizerLayer
+ * Feature: token cost estimator
+ */
 import type { Model } from "../protocol/types.js";
 
 export interface TokenizerCountResult {

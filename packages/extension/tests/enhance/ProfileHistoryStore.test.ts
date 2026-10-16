@@ -1,3 +1,9 @@
+/**
+ * Tests: ProfileHistoryStore Unit Tests (T060, T065, FR-014, FR-015).
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect, beforeEach } from "vitest";
 import type * as vscode from "vscode";
 import { ProfileHistoryStore } from "../../src/enhance/ProfileHistoryStore.js";

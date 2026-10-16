@@ -46,16 +46,22 @@
       "properties": {
         "tokenOptimizer.catalogApiUrl": {
           "type": "string",
-          "default": "https://catalog.token-optimizer.dev/v1",
-          "description": "Catalog API endpoint URL for remote pricing and model definitions. Leave empty for offline-only mode (uses bundled snapshot).",
+          "default": "http://127.0.0.1:3000/v1",
+          "description": "Catalog API endpoint URL for pricing, models and techniques (default: the local API started by `pnpm catalog:dev`). Falls back to the bundled snapshot when unreachable. Leave empty for offline-only mode (uses bundled snapshot).",
           "scope": "machine"
+        },
+        "tokenOptimizer.implement.exportDir": {
+          "type": "string",
+          "default": "ai_optimizer",
+          "description": "Workspace-relative folder that Implement writes the `ai_optimizer` Python package into. Python call sites import it as `ai_optimizer`, so keep the folder name `ai_optimizer` (you may nest it, e.g. `src/ai_optimizer`).",
+          "scope": "resource"
         }
       }
     }
   },
   "scripts": {
-    "vscode:prepublish": "pnpm run build",
-    "build": "tsc -b && node scripts/build.cjs",
+    "vscode:prepublish": "npm run build",
+    "build": "tsc -b && node scripts/build.cjs && node ../python-runtime/scripts/bundle-extension.mjs",
     "watch": "tsc -b -w",
     "test": "vitest run"
   },

@@ -1,3 +1,9 @@
+/**
+ * Platform-agnostic store for the user's setup (enabled models, enhance model, platform).
+ *
+ * Exports: UserSetup, SetupStorageBackend, USER_SETUP_STORAGE_KEY, UserSetupStore
+ * Feature: settings / API keys
+ */
 export interface UserSetup {
   platformId?: string;
   enabledModelsByProvider: Record<string, string[]>;

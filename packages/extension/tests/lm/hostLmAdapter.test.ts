@@ -1,3 +1,9 @@
+/**
+ * Tests: HostLmAdapter Unit Tests (T049, FR-007, FR-055, Principle VII).
+ *
+ * Exports: none (test suite)
+ * Feature: providers
+ */
 import { describe, it, expect, vi } from "vitest";
 
 interface MockVscodeLm {

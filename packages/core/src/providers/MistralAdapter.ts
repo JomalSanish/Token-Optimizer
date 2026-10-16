@@ -1,3 +1,9 @@
+/**
+ * Mistral API adapter (key validation, model list, completion with retry).
+ *
+ * Exports: MistralAdapter
+ * Feature: providers
+ */
 import type {
   ProviderAdapter,
   KeyValidationResult,
@@ -117,6 +123,9 @@ export class MistralAdapter implements ProviderAdapter {
       max_tokens: options.maxTokens || 4096,
       temperature: options.temperature ?? 0,
     };
+    if (options.responseFormat === "json_object") {
+      body.response_format = { type: "json_object" };
+    }
 
     const response = await fetchWithRetry(
       `${this.baseUrl}/chat/completions`,

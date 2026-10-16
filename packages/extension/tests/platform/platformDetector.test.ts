@@ -1,3 +1,9 @@
+/**
+ * Tests: PlatformDetector Unit Tests (T041, FR-001, Principle VII & X).
+ *
+ * Exports: none (test suite)
+ * Feature: settings / API keys
+ */
 import { describe, it, expect } from "vitest";
 import { PlatformDetector } from "../../src/platform/PlatformDetector.js";
 import type { CatalogSnapshot } from "@token-optimizer/core";

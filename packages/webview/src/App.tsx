@@ -1,3 +1,15 @@
+/**
+ * Webview root: header (catalog status badge), tab bar, and tab routing for
+ * Enhance | Estimate | Optimize | Prompt Optimizer | Implement | Router | Settings.
+ * Owns catalog state and cross-tab selections; each tab renders its own views/<Feature>View.
+ * Narrow sidebar (< 640 px): inactive tabs show icons only (title + aria-label), the tab bar
+ * scrolls horizontally instead of clipping, and the header offers "Open in editor" (a full-width
+ * editor-area panel) unless we already are that panel.
+ * FROZEN SHELL for Phase 1: tracks edit only their own view files.
+ *
+ * Exports: App, pickDefaultModel
+ * Feature: webview shell (all features)
+ */
 import React, { useState, useEffect } from "react";
 import {
   Sparkles,
@@ -5,17 +17,24 @@ import {
   Sliders,
   FolderGit2,
   Settings,
+  Wand,
+  Route,
   Wifi,
   WifiOff,
   AlertCircle,
   X,
+  Maximize2,
 } from "lucide-react";
 import { vscodeBridge } from "./protocol/vscode";
+import { hostView, useNarrowLayout } from "./utils/layout";
 import { EnhanceView } from "./views/EnhanceView";
 import { EstimateView } from "./views/EstimateView";
 import { OptimizeView } from "./views/OptimizeView";
 import { ImplementView } from "./views/ImplementView";
 import { SettingsView } from "./views/SettingsView";
+import { PromptOptimizerView } from "./views/PromptOptimizerView";
+import { RouterView } from "./views/RouterView";
+import type { CatalogViewData, FeatureViewProps, ModelRef } from "./views/viewProps";
 import type {
   HostToWebviewMsg,
   ProjectProfile,
@@ -26,9 +45,34 @@ import type {
   SavingsRange,
   Phase as CatalogPhase,
   Pricing,
+  RouterPreset,
 } from "@token-optimizer/core";
 
-type TabId = "enhance" | "estimate" | "optimize" | "implement" | "settings";
+type TabId =
+  | "enhance"
+  | "estimate"
+  | "optimize"
+  | "promptopt"
+  | "implement"
+  | "router"
+  | "settings";
+
+/**
+ * Default model when the user has not picked an Enhance model: the first active model of an
+ * enabled provider that has a stored key; undefined means "ask the user to pick one".
+ */
+export function pickDefaultModel(
+  providers: Provider[],
+  models: Model[],
+  configuredProviderIds: string[]
+): ModelRef | undefined {
+  for (const provider of providers) {
+    if (!provider.enabled || !configuredProviderIds.includes(provider.id)) continue;
+    const model = models.find((m) => m.providerId === provider.id && m.status === "active");
+    if (model) return { providerId: provider.id, modelId: model.id };
+  }
+  return undefined;
+}
 
 interface PersistedUiState {
   activeTab?: TabId;
@@ -42,7 +86,9 @@ export const App: React.FC = () => {
   const initialSavedState = vscodeBridge.getState<PersistedUiState>() || {};
 
   const [activeTab, setActiveTab] = useState<TabId>(initialSavedState.activeTab || "enhance");
-  const [isOffline, setIsOffline] = useState(false);
+  // null = unknown until the host sends catalog/updated (badge shows "Catalog: checking").
+  const [isOffline, setIsOffline] = useState<boolean | null>(null);
+  const [routerPresets, setRouterPresets] = useState<RouterPreset[]>([]);
   const [catalogPublishedAt, setCatalogPublishedAt] = useState<string | null>(null);
   const [platform, setPlatform] = useState("vscode");
   const [catalogPhases, setCatalogPhases] = useState<CatalogPhase[]>([]);
@@ -84,11 +130,6 @@ export const App: React.FC = () => {
     { providerId: string; modelId: string; keySlot?: number } | undefined
   >(undefined);
 
-  // Implement state
-  const [implementStatus, setImplementStatus] = useState<
-    "idle" | "running" | "completed" | "error"
-  >("idle");
-
   // Error banners (Finding 12)
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
@@ -103,7 +144,8 @@ export const App: React.FC = () => {
     });
   }, [activeTab, narrative, enhanceCostUsd, profile, selectedStrategyIds]);
 
-  // Initial handshake: send webview/ready to trigger host state push (Finding 12)
+  // Initial handshake: webview/ready makes the host (re)send catalog + auth state. If no catalog
+  // arrives shortly (e.g. ready was dropped), ask explicitly with catalog/request.
   useEffect(() => {
     vscodeBridge.postMessage({
       version: 1,
@@ -111,6 +153,13 @@ export const App: React.FC = () => {
       payload: {},
     });
   }, []);
+  useEffect(() => {
+    if (isOffline !== null) return;
+    const timer = setTimeout(() => {
+      vscodeBridge.postMessage({ version: 1, type: "catalog/request", payload: {} });
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [isOffline]);
 
   // H11: Auto-trigger estimation when switching to estimate tab with finalized profile
   useEffect(() => {
@@ -137,6 +186,7 @@ export const App: React.FC = () => {
           setModels(msg.payload.models);
           setPricing(msg.payload.pricing || []);
           setCatalogPhases(msg.payload.phases || []);
+          setRouterPresets(msg.payload.routerPresets ?? []);
           setIsOffline(msg.payload.isOffline);
           if (msg.payload.publishedAt) {
             setCatalogPublishedAt(msg.payload.publishedAt);
@@ -263,16 +313,6 @@ export const App: React.FC = () => {
           });
           break;
 
-        case "optimize/implement/plan":
-        case "optimize/apply/progress":
-          setImplementStatus("running");
-          break;
-
-        case "optimize/apply/complete":
-        case "optimize/handoff/result":
-          setImplementStatus("completed");
-          break;
-
         default:
           break;
       }
@@ -285,30 +325,68 @@ export const App: React.FC = () => {
     { id: "enhance" as TabId, label: "Enhance", icon: Sparkles },
     { id: "estimate" as TabId, label: "Estimate", icon: Calculator },
     { id: "optimize" as TabId, label: "Optimize", icon: Sliders },
+    { id: "promptopt" as TabId, label: "Prompt Optimizer", icon: Wand },
     { id: "implement" as TabId, label: "Implement", icon: FolderGit2 },
+    { id: "router" as TabId, label: "Router", icon: Route },
     { id: "settings" as TabId, label: "Settings", icon: Settings },
   ];
 
+  const narrow = useNarrowLayout();
+  const inPanel = hostView() === "panel";
+  const openInEditor = () =>
+    vscodeBridge.postMessage({ version: 1, type: "view/openInEditor", payload: {} });
+
   const currentProfileVersion = profile ? profile.profileVersion : 1;
+
+  const configuredProviderIds = [...new Set(configuredKeys.map((k) => k.providerId))];
+  const defaultModel = enhanceModel ?? pickDefaultModel(providers, models, configuredProviderIds);
+  const catalog: CatalogViewData = {
+    providers,
+    models,
+    pricing,
+    strategies,
+    routerPresets,
+    isOffline,
+  };
+  const featureProps: FeatureViewProps = {
+    catalog,
+    selectedTechniqueIds: selectedStrategyIds,
+    defaultModel,
+    configuredProviderIds,
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100">
       {/* Top Header */}
-      <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-20 px-4 py-2.5 flex items-center justify-between">
+      <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-20 px-3 py-2 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
           <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center text-white font-bold text-xs shadow-md shadow-indigo-500/20">
             TO
           </div>
-          <span className="font-semibold text-xs tracking-tight text-slate-100">
+          <span className="font-semibold text-xs tracking-tight text-slate-100 whitespace-nowrap">
             Token Optimizer
           </span>
-          <span className="text-[10px] text-slate-400 font-mono bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+          <span className="hidden sm:inline text-[10px] text-slate-400 font-mono bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
             {platform}
           </span>
         </div>
 
         <div className="flex items-center gap-2">
-          {isOffline ? (
+          {!inPanel && (
+            <button
+              onClick={openInEditor}
+              title="Open in editor (full width)"
+              aria-label="Open in editor"
+              className="p-1 rounded-md text-slate-400 hover:text-slate-100 hover:bg-slate-800"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {isOffline === null ? (
+            <span className="flex items-center gap-1 text-[11px] text-slate-400 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-full">
+              <Wifi className="w-3 h-3" /> Catalog: checking
+            </span>
+          ) : isOffline ? (
             <span className="flex items-center gap-1 text-[11px] text-amber-400 bg-amber-950/40 border border-amber-800/40 px-2 py-0.5 rounded-full">
               <WifiOff className="w-3 h-3" />
               <span>
@@ -342,23 +420,32 @@ export const App: React.FC = () => {
       )}
 
       {/* Tabs Navigation */}
-      <nav className="border-b border-slate-800/80 bg-slate-900/40 px-4 py-1.5 flex gap-1">
+      <nav
+        aria-label="Token Optimizer tabs"
+        data-testid="tab-bar"
+        className="border-b border-slate-800/80 bg-slate-900/40 px-1.5 py-1.5 flex gap-0.5 overflow-x-auto"
+      >
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
+          // Narrow pane: icon-only tabs (the active one keeps its label); tooltip + aria-label always.
+          const showLabel = !narrow || isActive;
 
           return (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              title={item.label}
+              aria-label={item.label}
+              aria-current={isActive ? "page" : undefined}
+              className={`flex shrink-0 items-center gap-1.5 ${showLabel ? "px-2.5" : "px-1.5"} py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
                 isActive
                   ? "bg-slate-800 text-slate-100 shadow-sm"
                   : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/60"
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
-              <span>{item.label}</span>
+              {showLabel && <span>{item.label}</span>}
               {item.id === "estimate" && profile?.finalizedAt && (
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Profile Finalized" />
               )}
@@ -368,14 +455,14 @@ export const App: React.FC = () => {
       </nav>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-4 max-w-4xl mx-auto w-full">
+      <main className="flex-1 p-3 sm:p-4 max-w-4xl mx-auto w-full min-w-0">
         {activeTab === "enhance" && (
           <EnhanceView
             profile={profile}
             narrative={narrative}
             isStreaming={isEnhanceStreaming}
             costUsd={enhanceCostUsd}
-            enhanceModel={enhanceModel}
+            enhanceModel={defaultModel}
             catalogPhases={catalogPhases}
             onProfileSelect={setProfile}
           />
@@ -403,13 +490,12 @@ export const App: React.FC = () => {
         )}
 
         {activeTab === "implement" && (
-          <ImplementView
-            selectedStrategyIds={selectedStrategyIds}
-            profileVersion={currentProfileVersion}
-            implementStatus={implementStatus}
-            onStatusChange={setImplementStatus}
-          />
+          <ImplementView {...featureProps} />
         )}
+
+        {activeTab === "promptopt" && <PromptOptimizerView {...featureProps} />}
+
+        {activeTab === "router" && <RouterView {...featureProps} />}
 
         {activeTab === "settings" && (
           <SettingsView

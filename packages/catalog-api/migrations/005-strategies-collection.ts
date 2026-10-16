@@ -1,3 +1,9 @@
+/**
+ * Migration 005: creates the strategies collection and migrates legacy optimizer_rules as drafts.
+ *
+ * Exports: up
+ * Feature: catalog
+ */
 import type { Db } from "mongodb";
 
 /**

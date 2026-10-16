@@ -1,12 +1,17 @@
+/**
+ * Tests: Catalog API Contract Tests (T038, contracts/catalog-api.yaml, Principle III, VIII).
+ *
+ * Exports: none (test suite)
+ * Feature: catalog
+ */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { MongoClient, type Db } from "mongodb";
-import * as fs from "node:fs";
 import * as path from "node:path";
 import { buildServer } from "../../src/server.js";
 import { CatalogSnapshotSchema } from "@token-optimizer/core";
 import { runMigrations } from "@token-optimizer/catalog-tools";
-import { seedCatalog } from "@token-optimizer/catalog-tools";
+import { seedCatalog, loadSeedDir } from "@token-optimizer/catalog-tools";
 
 describe("Catalog API Contract Tests (T038, contracts/catalog-api.yaml, Principle III, VIII)", () => {
   let mongod: MongoMemoryServer;
@@ -26,15 +31,10 @@ describe("Catalog API Contract Tests (T038, contracts/catalog-api.yaml, Principl
     await runMigrations(db, { migrationsDir });
 
     // Seed test catalog data from maintainer JSON
-    const seedDataPath = path.resolve(
-      __dirname,
-      "../../../catalog-tools/data/seed-catalog.json"
-    );
-    const rawSeed = JSON.parse(fs.readFileSync(seedDataPath, "utf-8"));
-    await seedCatalog(db, rawSeed);
+    await seedCatalog(db, loadSeedDir());
 
     server = buildServer({ db });
-  }, 60000);
+  }, 180000);
 
   afterAll(async () => {
     if (client) await client.close();
@@ -76,6 +76,12 @@ describe("Catalog API Contract Tests (T038, contracts/catalog-api.yaml, Principl
     expect(validated.phases.length).toBeGreaterThan(0);
     expect(validated.platforms.length).toBeGreaterThan(0);
     expect(validated.promptTemplates.length).toBeGreaterThan(0);
+
+    // v2 contract: Groq provider/models, router presets, compress template
+    expect(validated.providers.find((p) => p.id === "groq")?.adapterType).toBe("openai-compatible");
+    expect(validated.models.filter((m) => m.providerId === "groq").length).toBeGreaterThanOrEqual(2);
+    expect(validated.routerPresets?.some((r) => r.isDefault)).toBe(true);
+    expect(validated.promptTemplates.some((t) => t.id === "compress-default")).toBe(true);
 
     // Principle VIII: Strategies served by API must only have reviewStatus: 'approved'
     for (const strategy of validated.strategies) {
@@ -143,7 +149,7 @@ describe("Catalog API Contract Tests (T038, contracts/catalog-api.yaml, Principl
 
     // 2. Approve one strategy via human review workflow
     const { approveStrategy } = await import("@token-optimizer/catalog-tools");
-    await approveStrategy(db, "prompt-prefix-caching", "Alice (Reviewer)");
+    await approveStrategy(db, "cache-prefix-ordering", "Alice (Reviewer)");
 
     // 3. Now /v1/catalog serves exactly the approved strategy
     const afterRes = await server.inject({
@@ -152,10 +158,12 @@ describe("Catalog API Contract Tests (T038, contracts/catalog-api.yaml, Principl
     });
     const afterBody = JSON.parse(afterRes.body);
     expect(afterBody.strategies.length).toBe(1);
-    expect(afterBody.strategies[0].id).toBe("prompt-prefix-caching");
+    expect(afterBody.strategies[0].id).toBe("cache-prefix-ordering");
     expect(afterBody.strategies[0].reviewStatus).toBe("approved");
     expect(afterBody.strategies[0].reviewedBy).toBe("Alice (Reviewer)");
     expect(afterBody.strategies[0].reviewedAt).toBeDefined();
+    expect(afterBody.strategies[0].optimizer).toMatchObject({ mode: "rule", affects: "input" });
+    expect(afterBody.strategies[0].implementation).toMatchObject({ language: "python" });
   });
 
   it("Rate Limiting: opt-in rate limit configuration is supported without crashing", () => {

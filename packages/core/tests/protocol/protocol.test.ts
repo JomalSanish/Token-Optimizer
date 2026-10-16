@@ -1,3 +1,9 @@
+/**
+ * Tests: Webview Message Protocol Schemas (T011, T012, Principle II).
+ *
+ * Exports: none (test suite)
+ * Feature: shared protocol / webview shell
+ */
 import { describe, it, expect } from "vitest";
 import {
   HostToWebviewMsgSchema,

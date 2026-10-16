@@ -1,3 +1,9 @@
+/**
+ * Loads and validates the bundled offline catalog snapshot through an injected file reader.
+ *
+ * Exports: ReadFileFn, BundledSnapshotLoader
+ * Feature: catalog
+ */
 import {
   CatalogSnapshotSchema,
   type CatalogSnapshot,

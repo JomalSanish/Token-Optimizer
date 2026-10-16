@@ -1,3 +1,9 @@
+/**
+ * Catalog API process entry: loads .env, connects to MongoDB (MONGODB_URI) and starts Fastify.
+ *
+ * Exports: none
+ * Feature: catalog
+ */
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { MongoClient, type Db } from "mongodb";

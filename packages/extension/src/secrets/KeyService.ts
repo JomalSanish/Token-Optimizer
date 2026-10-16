@@ -1,3 +1,9 @@
+/**
+ * Stores API keys in VS Code SecretStorage and exposes them only via getter closures.
+ *
+ * Exports: ConfiguredKeyInfo, KeyService
+ * Feature: settings / API keys
+ */
 import type * as vscode from "vscode";
 
 export interface ConfiguredKeyInfo {

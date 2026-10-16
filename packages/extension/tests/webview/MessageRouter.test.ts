@@ -1,3 +1,9 @@
+/**
+ * Tests: MessageRouter (T014, Principle II).
+ *
+ * Exports: none (test suite)
+ * Feature: shared protocol / webview shell
+ */
 import { describe, it, expect } from "vitest";
 import { MessageRouter } from "../../src/webview/MessageRouter.js";
 
@@ -100,4 +106,52 @@ describe("MessageRouter (T014, Principle II)", () => {
     expect(sendFailed).toBe(false);
     expect(posted.length).toBe(1);
   });
+
+  it("keeps handlers across a detached and re-attached target (view re-resolve)", async () => {
+    const saved = {
+      version: 1 as const,
+      type: "auth/keySaved" as const,
+      payload: { providerId: "groq", keySlot: 0, maskedKey: "...1234" },
+    };
+    const ready = { version: 1, type: "webview/ready", payload: {} };
+    const first: unknown[] = [];
+    const second: unknown[] = [];
+    const router = new MessageRouter({ postMessage: async (m) => (first.push(m), true) });
+    router.register("webview/ready", async () => {
+      await router.send(saved);
+    });
+
+    await router.handleInbound(ready);
+    router.detachTarget();
+    expect(await router.send(saved)).toBe(false);
+    router.setTarget({ postMessage: async (m) => (second.push(m), true) });
+    await router.handleInbound(ready);
+
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(1);
+  });
+
+  it("sends to every attached webview (sidebar + editor panel) and detaches one at a time", async () => {
+    const sidebar: unknown[] = [];
+    const panel: unknown[] = [];
+    const sidebarTarget = { postMessage: async (m: unknown) => (sidebar.push(m), true) };
+    const panelTarget = { postMessage: async (m: unknown) => (panel.push(m), true) };
+    const router = new MessageRouter(sidebarTarget);
+    router.setTarget(panelTarget);
+    const saved = {
+      version: 1 as const,
+      type: "auth/keySaved" as const,
+      payload: { providerId: "groq", keySlot: 0, maskedKey: "...1234" },
+    };
+
+    expect(await router.send(saved)).toBe(true);
+    router.detachTarget(panelTarget);
+    expect(await router.send(saved)).toBe(true);
+    router.detachTarget(sidebarTarget);
+    expect(await router.send(saved)).toBe(false);
+
+    expect(sidebar).toHaveLength(2);
+    expect(panel).toHaveLength(1);
+  });
 });
+

@@ -1,3 +1,9 @@
+/**
+ * Settings tab: provider API keys, enabled models and platform.
+ *
+ * Exports: ConfiguredKey, SettingsProps, Settings
+ * Feature: settings / API keys
+ */
 import React, { useState } from "react";
 import { KeyRound, ShieldCheck, Trash2, Cpu, EyeOff, CheckSquare, Square } from "lucide-react";
 import { vscodeBridge } from "../protocol/vscode";
@@ -116,7 +122,7 @@ export const Settings: React.FC<SettingsProps> = ({
           <span>Add Provider API Key</span>
         </h3>
 
-        <div className="grid grid-cols-2 gap-3 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
           <div>
             <label className="text-slate-400 block mb-1">Target Provider</label>
             <select
@@ -205,7 +211,7 @@ export const Settings: React.FC<SettingsProps> = ({
                       <span className="text-[11px] font-medium text-slate-400 block mb-1.5">
                         Enabled Models for Optimization:
                       </span>
-                      <div className="grid grid-cols-2 gap-1.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                         {providerModels.map((m) => {
                           const isEnabled = k.enabledModels.includes(m.id);
                           return (
@@ -240,7 +246,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
       {/* Host LM (Copilot) Option (Shown only when its adapter is available, FR-007) */}
       {copilotAvailable && hostLmProvider && (
-        <div className="glass-panel p-5 rounded-xl border border-slate-800 flex items-center justify-between">
+        <div className="glass-panel p-5 rounded-xl border border-slate-800 flex items-center justify-between flex-wrap gap-y-2">
           <div className="flex items-center gap-3">
             <Cpu className="w-5 h-5 text-indigo-400" />
             <div>

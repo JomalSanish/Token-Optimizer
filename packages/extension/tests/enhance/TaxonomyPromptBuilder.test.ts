@@ -1,3 +1,9 @@
+/**
+ * Tests: TaxonomyPromptBuilder Unit & Snapshot Tests (Budget-Driven Ladder).
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect } from "vitest";
 import {
   TaxonomyPromptBuilder,

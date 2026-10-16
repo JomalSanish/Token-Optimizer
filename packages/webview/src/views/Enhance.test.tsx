@@ -1,3 +1,9 @@
+/**
+ * Tests: Enhance View Component (T063, T133, FR-009, FR-012, FR-015, Principle IX).
+ *
+ * Exports: none (test suite)
+ * Feature: token cost estimator
+ */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";

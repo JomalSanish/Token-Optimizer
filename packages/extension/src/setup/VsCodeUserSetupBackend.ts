@@ -1,3 +1,9 @@
+/**
+ * UserSetupStore backend on VS Code globalState.
+ *
+ * Exports: VsCodeUserSetupBackend
+ * Feature: settings / API keys
+ */
 import type * as vscode from "vscode";
 import type { SetupStorageBackend } from "@token-optimizer/core";
 

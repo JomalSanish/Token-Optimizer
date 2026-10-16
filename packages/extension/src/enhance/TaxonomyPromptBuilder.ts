@@ -1,3 +1,10 @@
+/**
+ * Builds the phase-taxonomy section of the Enhance prompt within a token budget.
+ *
+ * Exports: TaxonomyBudgetLevel, BuildTaxonomyPromptOptions, BuildTaxonomyPromptResult,
+ *   TaxonomyPromptBuilder
+ * Feature: token cost estimator
+ */
 import type { Phase } from "@token-optimizer/core";
 
 export type TaxonomyBudgetLevel = "full" | "short" | "compact";
